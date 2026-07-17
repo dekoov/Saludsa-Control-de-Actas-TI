@@ -1,0 +1,75 @@
+name: Prueba de Compilación y Release Completo
+
+on:
+  push:
+    tags:
+      - 'v*' # Se dispara solo cuando subes un tag como v1.0.0
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: 1. Clonar repositorio
+      uses: actions/checkout@v4
+
+    # --- CONFIGURAR Y COMPILAR REACT ---
+    - name: 2.a Configurar Node.js (Para React)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: 2.b Instalar dependencias y compilar React
+      run: |
+        cd client-react
+        npm install
+        npm run build
+        # Esto creará la carpeta 'dist' en tiempo de ejecución dentro de la nube
+
+    # --- CONFIGURAR PYTHON ---
+    - name: 3. Configurar Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: 4. Instalar dependencias de Python
+      run: |
+        python -m pip install --upgrade pip
+        if (Test-Path "server-flask/requirements.txt") {
+          pip install -r server-flask/requirements.txt
+        }
+        pip install pyinstaller
+
+    - name: 5. Compilar ejecutable con PyInstaller
+      run: |
+        cd server-flask
+        
+        $PLAYWRIGHT_DIR = python -c "import os, playwright; print(os.path.dirname(playwright.__file__))"
+        echo "La ruta dinámica de Playwright es: $PLAYWRIGHT_DIR"
+
+        pyinstaller --clean --name "SaludsaActas" --noconfirm --onedir -w `
+          --add-data "../client-react/dist;dist" `
+          --add-data "src/templates;src/templates" `
+          --add-data "$PLAYWRIGHT_DIR\driver;playwright\driver" `
+          --hidden-import win32com `
+          --hidden-import pythoncom `
+          --hidden-import docxtpl `
+          --hidden-import playwright `
+          main.py
+
+    # --- COMPILAR INSTALADOR FINAL ---
+    - name: 6. Compilar Instalador con Inno Setup de forma nativa
+      run: |
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" saludsa.iss
+
+    # --- PUBLICAR EN GITHUB ---
+    - name: 7. Crear Release de Prueba en GitHub
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: Saludsa Actas Demo ${{ github.ref_name }}
+        draft: false
+        prerelease: true
+        files: Output/SaludsaActas_Setup.exe
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import Sidebar from "@/components/shared/Sidebar";
+import UpdateBanner from "@/components/UpdateBanner";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import {
   Menu,
@@ -48,6 +49,9 @@ export default function Layout({ children, title = "Dashboard" }) {
             </Link>
           </div>
         </header>
+
+        {/* Aviso de actualización disponible */}
+        <UpdateBanner />
 
         {/* Contenido dinámico de la página */}
         {children}

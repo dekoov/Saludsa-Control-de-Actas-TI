@@ -17,3 +17,6 @@ client-react/dist/
 *.spec
 *.db
 
+# Generado por el pipeline de release (no commitear)
+server-flask/version.txt
+

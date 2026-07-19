@@ -41,6 +41,7 @@ from src.features.drafts.router import drafts_bp
 from src.features.auth.router import auth_bp
 from src.features.email.router import email_bp
 from src.features.discounts.router import discounts_bp
+from src.services.updater.router import update_bp
 from src.config import config, resolve_route
 from src.core.db import init_db
 import logging
@@ -81,6 +82,7 @@ app.register_blueprint(drafts_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(email_bp)
 app.register_blueprint(discounts_bp)
+app.register_blueprint(update_bp)
 
 @app.route('/')
 def home():
@@ -124,6 +126,10 @@ if __name__ == '__main__':
         inicializar_tray(application_path)
     else:
         print("Proceso vigilante de Flask detectado: saltando System Tray.")
+
+    # 4.5 Iniciar el programador de auto-actualizaciones (solo activo en el .exe)
+    from src.services.updater.updater import start_update_scheduler
+    start_update_scheduler()
 
     # 5. Encender el servidor
     es_produccion = getattr(sys, 'frozen', False) or config.is_production()

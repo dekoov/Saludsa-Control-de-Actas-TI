@@ -9,7 +9,10 @@ Flujo general:
    %TEMP% con progreso y verificación SHA-256.
 3. Al terminar la descarga se escribe y lanza updater.ps1 desacoplado
    (DETACHED_PROCESS) y la app se cierra 1.5s después; el script espera al
-   cierre, instala en modo /VERYSILENT y reabre la aplicación.
+   cierre, fuerza la terminación de cualquier proceso del directorio de
+   instalación (incluidos los huérfanos de Playwright/Chromium que os._exit
+   no limpia), instala en modo /VERYSILENT con un reintento y reabre la
+   aplicación.
 
 El chequeo programado (scheduler) solo se activa en la app compilada
 (sys.frozen). En desarrollo local nunca se ofrecen actualizaciones.
@@ -44,7 +47,13 @@ CHECK_INTERVAL = 4 * 3600   # 4 horas
 CHECK_START_DELAY = 15      # primer chequeo a los 15 segundos del arranque
 SHUTDOWN_DELAY = 1.5        # cierre de la app tras lanzar el updater
 
-# Script de actualización totalmente parametrizado (no requiere interpolación)
+# Script de actualización totalmente parametrizado (no requiere interpolación).
+# Corre como proceso independiente (DETACHED_PROCESS): espera al cierre de la
+# app, fuerza la terminación de cualquier proceso que se ejecute desde el
+# directorio de instalación (libera SaludsaActas.exe, el driver node.exe de
+# Playwright en _internal y los chrome.exe de playwright-browsers, todos
+# dentro de {localappdata}\SaludsaActas, que Inno Setup debe sobrescribir),
+# instala en modo silencioso con un reintento y reabre la aplicación.
 UPDATER_PS1 = r"""param(
     [Parameter(Mandatory=$true)][int]$ProcessId,
     [Parameter(Mandatory=$true)][string]$InstallerPath,
@@ -52,27 +61,62 @@ UPDATER_PS1 = r"""param(
 )
 
 $ErrorActionPreference = 'SilentlyContinue'
+$InstallDir = Split-Path $AppExePath -Parent
+$LogPath = Join-Path (Split-Path $InstallerPath -Parent) 'updater.log'
+Start-Transcript -Path $LogPath -Force
 
-# 1. Esperar a que la aplicacion se cierre por completo (max. 60 s)
+# Mata cualquier proceso cuyo ejecutable viva dentro del directorio de
+# instalacion (filtrado por RUTA, nunca por nombre, para no tocar procesos
+# ajenos del usuario como su navegador Chrome o su Node.js).
+function Stop-AppProcesses {
+    param([string]$Dir)
+    $prefix = $Dir.TrimEnd('\') + '\'
+    Get-CimInstance Win32_Process |
+        Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($prefix, 'OrdinalIgnoreCase') -and $_.ProcessId -ne $PID } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+}
+
+# 1. Esperar a que la aplicacion se cierre por completo (max. 20 s)
 $elapsed = 0
-while ((Get-Process -Id $ProcessId) -and ($elapsed -lt 60000)) {
+while ((Get-Process -Id $ProcessId) -and ($elapsed -lt 20000)) {
     Start-Sleep -Milliseconds 500
     $elapsed += 500
 }
-Start-Sleep -Seconds 2
 
-# 2. Quitar la marca de "descargado de internet" (mitiga SmartScreen)
+# 2. Cierre forzado del proceso principal si sigue vivo
+Stop-Process -Id $ProcessId -Force
+
+# 3. Barrido de procesos del directorio de instalacion (huerfanos de
+#    Playwright/Chromium incluidos) para liberar el ejecutable y el mutex
+Stop-AppProcesses -Dir $InstallDir
+
+# 4. Esperar a que el SO libere los handles de archivos
+Start-Sleep -Seconds 3
+
+# 5. Quitar la marca de "descargado de internet" (mitiga SmartScreen)
 Unblock-File -Path $InstallerPath
 
-# 3. Ejecutar el instalador en modo totalmente silencioso
-Start-Process -FilePath $InstallerPath -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+# 6. Ejecutar el instalador en modo totalmente silencioso. /CLOSEAPPLICATIONS
+#    usa el Restart Manager para cerrar apps que retengan archivos.
+$installArgs = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CLOSEAPPLICATIONS')
+$proc = Start-Process -FilePath $InstallerPath -ArgumentList $installArgs -Wait -PassThru
 
-# 4. Reabrir la aplicacion actualizada
+# Reintento unico si el instalador fallo (p. ej. archivo aun bloqueado por AV)
+if ($proc.ExitCode -ne 0) {
+    Write-Output "El instalador devolvio el codigo $($proc.ExitCode). Reintentando..."
+    Stop-AppProcesses -Dir $InstallDir
+    Start-Sleep -Seconds 5
+    $proc = Start-Process -FilePath $InstallerPath -ArgumentList $installArgs -Wait -PassThru
+}
+
+# 7. Reabrir la aplicacion (si la instalacion fallo, al menos vuelve la
+#    version anterior y el sistema vuelve a ofrecer la actualizacion)
 if (Test-Path $AppExePath) {
     Start-Process -FilePath $AppExePath
 }
 
-# 5. Limpieza de temporales
+# 8. Limpieza de temporales (el log se conserva para diagnostico)
+Stop-Transcript
 Remove-Item -Path $InstallerPath -Force
 Remove-Item -Path $MyInvocation.MyCommand.Path -Force
 """

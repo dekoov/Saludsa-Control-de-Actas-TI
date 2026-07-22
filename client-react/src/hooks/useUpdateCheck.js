@@ -7,13 +7,21 @@ const BASE_URL =
 
 const POLL_NORMAL_MS = 5 * 60 * 1000; // Cada 5 minutos en reposo
 const POLL_APPLYING_MS = 1000;        // Cada segundo mientras se actualiza
+const MAX_NETWORK_FAILURES = 3;       // Fallos seguidos antes de asumir cierre del backend
 
 /**
  * Hook que consulta el estado de actualización de la aplicación.
  * - Al cargar y cada 5 min consulta GET /api/system/version.
  * - Mientras hay una actualización en curso (applying), consulta cada 1s
  *   para reflejar el progreso de descarga en tiempo casi real.
- * - Los errores de red son silenciosos.
+ * - Los errores de red son silenciosos, EXCEPTO durante una actualización:
+ *   si el backend deja de responder mientras applying=true, se interpreta
+ *   como el cierre esperado del servidor para instalar la nueva versión
+ *   (el updater desacoplado instala y reabre la app). En ese caso la UI
+ *   pasa a stage "restarting" sin marcar error.
+ * - Cuando el backend vuelve a responder tras ese cierre, la página se
+ *   recarga una sola vez para cargar los assets de la versión recién
+ *   instalada (evita usar un frontend viejo contra un backend nuevo).
  */
 export function useUpdateCheck() {
   const [state, setState] = useState({
@@ -27,6 +35,9 @@ export function useUpdateCheck() {
   });
 
   const applyingRef = useRef(false);
+  const failCountRef = useRef(0);
+  const backendDownRef = useRef(false);
+  const reloadedRef = useRef(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -35,6 +46,20 @@ export function useUpdateCheck() {
 
       const result = await response.json();
       const d = result.data || {};
+      failCountRef.current = 0;
+
+      // El backend estuvo caído durante la actualización y ahora responde:
+      // la app ya se reinstaló y reabrió. Recargar una sola vez para cargar
+      // los assets de la versión nueva (si la instalación falló y volvió la
+      // versión anterior, el reload es inofensivo y el banner reaparece solo).
+      if (backendDownRef.current && applyingRef.current) {
+        if (!reloadedRef.current) {
+          reloadedRef.current = true;
+          window.location.reload();
+        }
+        return;
+      }
+      backendDownRef.current = false;
       applyingRef.current = Boolean(d.applying);
 
       setState({
@@ -47,7 +72,21 @@ export function useUpdateCheck() {
         error: d.error ?? null,
       });
     } catch {
-      // Errores de red silenciosos: no interrumpir al usuario
+      // Fuera de una actualización, los errores de red son silenciosos.
+      if (!applyingRef.current) return;
+
+      // Durante una actualización, exigir varios fallos consecutivos antes de
+      // interpretar que el backend se cerró para instalar (evita falsos
+      // positivos por parpadeos de red mientras dura la descarga).
+      failCountRef.current += 1;
+      if (failCountRef.current < MAX_NETWORK_FAILURES) return;
+
+      backendDownRef.current = true;
+      setState((s) => {
+        // Guarda: si ya estamos en "restarting", no re-renderizar cada 1s.
+        if (s.applying && s.stage === "restarting") return s;
+        return { ...s, applying: true, stage: "restarting", progress: 100, error: null };
+      });
     }
   }, []);
 
@@ -66,6 +105,8 @@ export function useUpdateCheck() {
 
   const applyUpdate = useCallback(async () => {
     applyingRef.current = true;
+    failCountRef.current = 0;
+    backendDownRef.current = false;
     setState((s) => ({ ...s, applying: true, error: null, stage: "downloading" }));
     try {
       const response = await fetchConAuth(`${BASE_URL}/api/system/update/apply`, {

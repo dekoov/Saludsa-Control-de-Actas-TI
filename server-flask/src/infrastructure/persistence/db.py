@@ -15,7 +15,9 @@ def init_db(app):
     if getattr(sys, "frozen", False):
         application_path = os.path.dirname(sys.executable)
     else:
-        application_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        application_path = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
 
     # Configurar SQLite por defecto
     db_path = os.path.join(application_path, "saludsa.db")

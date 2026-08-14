@@ -1,7 +1,7 @@
 from typing import Any
 
 from sqlalchemy import desc, func
-from src.core.db import db
+from src.infrastructure.persistence.db import db
 from src.models.acta import Acta, ActaDraft
 from src.models.employee import Empleado
 from src.models.enums import ActaStatus

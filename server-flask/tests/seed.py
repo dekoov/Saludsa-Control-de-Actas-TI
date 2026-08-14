@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from flask import Flask
-from src.core.db import db, init_db
+from src.infrastructure.persistence.db import db, init_db
 from src.models.equipment import Activo, Accesorio, Empleado, Acta, ActaType, ActaStatus
 
 

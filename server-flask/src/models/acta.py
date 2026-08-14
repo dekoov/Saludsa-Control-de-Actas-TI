@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.core.db import db
-from src.utils.enums_value import value_enum
+from src.infrastructure.persistence.db import db
+from src.infrastructure.persistence.enums_value import value_enum
 
 from .enums import ActaStatus, ActaType, SyncStatus
 from .equipment import Activo, acta_accesorios, acta_activos

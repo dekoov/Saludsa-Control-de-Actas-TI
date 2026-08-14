@@ -1,6 +1,6 @@
 from typing import Any
 
-from src.core.db import db
+from src.infrastructure.persistence.db import db
 from src.models.employee import Empleado
 
 

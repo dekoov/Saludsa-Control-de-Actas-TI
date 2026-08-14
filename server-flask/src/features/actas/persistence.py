@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import desc, or_
-from src.core.db import db
+from src.infrastructure.persistence.db import db
 from src.core.exceptions import DatabaseError
 from src.features.employees.persistence import upsert_empleado
 from src.features.equipments.persistence import insert_accesorio, upsert_activo

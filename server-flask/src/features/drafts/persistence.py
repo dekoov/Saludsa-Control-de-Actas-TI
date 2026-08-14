@@ -1,6 +1,6 @@
 import json
 
-from src.core.db import db
+from src.infrastructure.persistence.db import db
 from src.features.drafts.service import generate_draft_title
 from src.models.acta import ActaDraft
 

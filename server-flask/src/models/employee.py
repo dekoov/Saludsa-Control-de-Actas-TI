@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.core.db import db
+from src.infrastructure.persistence.db import db
 from src.models.acta import Acta
 
 

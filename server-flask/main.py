@@ -39,7 +39,7 @@ from datetime import timedelta
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from src.config import config
-from src.core.db import init_db
+from src.infrastructure.persistence.db import init_db
 from src.features.actas.router import equipment_bp
 from src.features.auth.router import auth_bp
 from src.features.dashboard.router import dashboard_bp

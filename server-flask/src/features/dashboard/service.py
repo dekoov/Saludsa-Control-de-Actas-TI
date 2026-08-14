@@ -1,13 +1,13 @@
-from typing import List, Dict, Any
-from sqlalchemy import func, desc
-from src.core.db import db
+from typing import Any
 
-from src.models.enums import ActaStatus, SyncStatus
+from sqlalchemy import desc, func
+from src.core.db import db
 from src.models.acta import Acta, ActaDraft
 from src.models.employee import Empleado
+from src.models.enums import ActaStatus
 
 
-def get_dashboard_stats() -> Dict[str, int]:
+def get_dashboard_stats() -> dict[str, int]:
     """
     Retorna estadísticas para el dashboard.
     - total_actas: total de actas en el sistema
@@ -18,7 +18,7 @@ def get_dashboard_stats() -> Dict[str, int]:
     total_actas = Acta.query.count()
     
     pendientes_firma = Acta.query.filter_by(
-        estado=ActaStatus.PENDIENTE_FIRMA.value
+        estado=ActaStatus.PENDIENTE_FIRMA
     ).count()
     
     borradores = ActaDraft.query.count()
@@ -35,7 +35,7 @@ def get_dashboard_stats() -> Dict[str, int]:
     }
 
 
-def get_recent_users() -> List[Dict[str, Any]]:
+def get_recent_users() -> list[dict[str, Any]]:
     """
     Retorna los últimos 5 empleados con acta generada, sin duplicados,
     ordenados por la fecha de su acta más reciente.

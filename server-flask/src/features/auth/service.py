@@ -1,6 +1,7 @@
-from ldap3 import Server, Connection, ALL, SUBTREE
-from ldap3.core.exceptions import LDAPBindError
 import logging
+
+from ldap3 import ALL, SUBTREE, Connection, Server
+from ldap3.core.exceptions import LDAPBindError
 from src.config.config import config
 from src.utils.ldap_helpers import obtener_upn_dinamico
 
@@ -33,7 +34,6 @@ def validar_credenciales(username, password) -> dict | None:
             'email': "tester@local.dev",
             'city': "Guayaquil"
         }
-    # ----------------------------------------------
 
     logger.info(f"Intentando auth para: {username} | Servidor Configurado: {config.LDAP_SERVER}")
     upn = obtener_upn_dinamico(username)
@@ -52,7 +52,7 @@ def validar_credenciales(username, password) -> dict | None:
             receive_timeout=10
         )
         # Verificación en tiempo de ejecución
-        logger.info(f"--- AUDITORÍA DE SEGURIDAD LDAP ---")
+        logger.info("--- AUDITORÍA DE SEGURIDAD LDAP ---")
         logger.info(f"¿Servidor configurado con SSL?: {server.ssl}")
         logger.info(f"Puerto real de la conexión: {server.port}")
         
@@ -76,13 +76,10 @@ def validar_credenciales(username, password) -> dict | None:
         
         pertenece = False
         if 'memberOf' in entry:
-            # Buscamos de forma exacta el bloque "cn=nombre_del_grupo," 
-            # o simplemente verificamos que empiece con el CN correcto.
             target_cn = f"cn={GRUPO_PERMITIDO.lower()}"
             
             for grupo in entry.memberOf.values:
                 grupo_str = str(grupo).lower()
-                # Separamos por comas y verificamos si el primer elemento (el CN) coincide
                 if grupo_str.startswith(target_cn):
                     pertenece = True
                     break
@@ -109,7 +106,7 @@ def validar_credenciales(username, password) -> dict | None:
         logger.warning(f"Credenciales de LDAP incorrectas para el usuario: {username}")
         return None
     except Exception as e:
-        logger.error(f"Error controlado en validar_credenciales: {str(e)}")
+        logger.error(f"Error controlado en validar_credenciales: {e!s}")
         return None
     finally:
         if conn and conn.bound:

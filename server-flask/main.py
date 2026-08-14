@@ -47,7 +47,7 @@ from src.features.discounts.router import discounts_bp
 from src.features.drafts.router import drafts_bp
 from src.features.email.router import email_bp
 from src.services.ad.router import user_bp
-from src.services.updater.router import update_bp
+from src.infrastructure.updater.router import update_bp
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +133,7 @@ if __name__ == "__main__":
 
     # 3. Configurar entorno físico (Logs y Navegadores)
     from src.config import check_playwright, setup_logging
-    from src.config.tray_config import inicializar_tray
+    from src.infrastructure.tray.tray_orchestrator import inicializar_tray
 
     logger.info("Buscando archivo .env en: %s", env_path)
     check_playwright()
@@ -145,7 +145,7 @@ if __name__ == "__main__":
         print("Proceso vigilante de Flask detectado: saltando System Tray.")
 
     # 4.5 Iniciar el programador de auto-actualizaciones (solo activo en el .exe)
-    from src.services.updater.updater import start_update_scheduler
+    from src.infrastructure.updater.updater import start_update_scheduler
 
     start_update_scheduler()
 

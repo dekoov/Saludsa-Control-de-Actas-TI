@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from src.services.ad.service import search_user_ad
+from src.features.ad.service import search_user_ad
 from src.core.decorators import requiere_login
 
 user_bp = Blueprint('user_bp', __name__)

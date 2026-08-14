@@ -1,7 +1,10 @@
-from ldap3 import SUBTREE
 import logging
-from src.config.ldap_config import create_ldap_connection
+
+from ldap3 import SUBTREE
+
 from src.config.config import config
+from src.infrastructure.ldap.ldap_client import map_ldap_entry_to_user
+from src.infrastructure.ldap.ldap_config import create_ldap_connection
 
 logger = logging.getLogger(__name__)
 
@@ -35,18 +38,7 @@ def search_user_ad(query):
         )
 
         for entry in conn.entries:
-            results.append({
-                'first_names': str(entry.GivenName) if 'GivenName' in entry else "N/A",
-                'last_names': str(entry.sn) if 'sn' in entry else "N/A",
-                'display_name': str(entry.displayName) if 'displayName' in entry else "N/A",
-                'full_name': str(entry.Name) if 'Name' in entry else "N/A",
-                'username': str(entry.sAMAccountName) if 'sAMAccountName' in entry else None,
-                'national_id': str(entry.employeeID) if 'employeeID' in entry else None,
-                'department': str(entry.Department) if 'Department' in entry else None,
-                'position': str(entry.Description) if 'Description' in entry else None,
-                'email': str(entry.mail) if 'mail' in entry else None,
-                'city': str(entry.l) if 'l' in entry else None
-            })
+            results.append(map_ldap_entry_to_user(entry))
         return results
         
     except Exception as e:

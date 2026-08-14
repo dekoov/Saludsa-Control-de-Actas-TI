@@ -1,9 +1,12 @@
 import logging
 
-from ldap3 import ALL, SUBTREE, Connection, Server
+from ldap3 import SUBTREE
 from ldap3.core.exceptions import LDAPBindError
+
 from src.config.config import config
-from src.utils.ldap_helpers import obtener_upn_dinamico
+from src.infrastructure.ldap.ldap_client import map_ldap_entry_to_user
+from src.infrastructure.ldap.ldap_config import create_ldap_connection
+from src.infrastructure.ldap.ldap_helpers import obtener_upn_dinamico
 
 logger = logging.getLogger(__name__)
 
@@ -38,24 +41,18 @@ def validar_credenciales(username, password) -> dict | None:
     logger.info(f"Intentando auth para: {username} | Servidor Configurado: {config.LDAP_SERVER}")
     upn = obtener_upn_dinamico(username)
     logger.info(f"UPN CALCULADO EN ENTORNO FLASK: '{upn}'")
-    
+
     conn = None
     try:
         # Conectar al servidor usando tu UPN directo
-        server = Server(config.LDAP_SERVER, get_info=ALL, connect_timeout=3)
-        conn = Connection(
-            server,
-            user=upn,
-            password=password,
-            auto_bind=True,
-            auto_referrals=False,
-            receive_timeout=10
-        )
+        conn = create_ldap_connection(upn, password)
+        server = conn.server
+
         # Verificación en tiempo de ejecución
         logger.info("--- AUDITORÍA DE SEGURIDAD LDAP ---")
         logger.info(f"¿Servidor configurado con SSL?: {server.ssl}")
         logger.info(f"Puerto real de la conexión: {server.port}")
-        
+
         logger.info(f"Paso 1 exitoso: Contraseña correcta para {username}")
         
         # Realizamos una búsqueda limpia del usuario, exactamente igual a tu código anterior funcional
@@ -89,18 +86,7 @@ def validar_credenciales(username, password) -> dict | None:
             return None
             
         # Si pasó la validación, mapeamos el diccionario idéntico a tu esquema funcional
-        return {
-            'first_names': str(entry.GivenName) if 'GivenName' in entry else "N/A",
-            'last_names': str(entry.sn) if 'sn' in entry else "N/A",
-            'display_name': str(entry.displayName) if 'displayName' in entry else "N/A",
-            'full_name': str(entry.Name) if 'Name' in entry else "N/A",
-            'username': str(entry.sAMAccountName) if 'sAMAccountName' in entry else username,
-            'national_id': str(entry.employeeID) if 'employeeID' in entry else None,
-            'department': str(entry.Department) if 'Department' in entry else None,
-            'position': str(entry.Description) if 'Description' in entry else None,
-            'email': str(entry.mail) if 'mail' in entry else None,
-            'city': str(entry.l) if 'l' in entry else None
-        }
+        return map_ldap_entry_to_user(entry, default_username=username)
         
     except LDAPBindError:
         logger.warning(f"Credenciales de LDAP incorrectas para el usuario: {username}")

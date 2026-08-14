@@ -46,7 +46,7 @@ from src.features.dashboard.router import dashboard_bp
 from src.features.discounts.router import discounts_bp
 from src.features.drafts.router import drafts_bp
 from src.features.email.router import email_bp
-from src.services.ad.router import user_bp
+from src.features.ad.router import user_bp
 from src.infrastructure.updater.router import update_bp
 
 logger = logging.getLogger(__name__)

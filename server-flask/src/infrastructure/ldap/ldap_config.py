@@ -3,9 +3,9 @@ import logging
 from flask import session
 from ldap3 import ALL, Connection, Server
 
-from src.utils.ldap_helpers import obtener_upn_dinamico
+from src.infrastructure.ldap.ldap_helpers import obtener_upn_dinamico
 
-from .config import config
+from src.config.config import config
 
 logger = logging.getLogger(__name__)
 

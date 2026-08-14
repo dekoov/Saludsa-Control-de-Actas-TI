@@ -1,4 +1,5 @@
 from datetime import datetime
+
 from src.core.db import db
 
 # Relationship tables

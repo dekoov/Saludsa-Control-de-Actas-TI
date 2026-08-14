@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class EquipmentStatus(Enum):
     NUEVO = 'Nuevo'
     USADO = 'Usado'

@@ -1,7 +1,7 @@
 # src/features/actas/helpers.py
 import base64
 
-from src.services.document_service import (
+from src.infrastructure.documents.document_service import (
     convert_to_pdf_buffer,
     generate_file_docx,
 )

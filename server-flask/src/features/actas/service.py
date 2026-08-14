@@ -14,7 +14,7 @@ from src.features.actas.persistence import (
     update_acta_sync_status,
 )
 from src.models.enums import ActaStatus, EquipmentType
-from src.services.document_service import convert_to_pdf_buffer
+from src.infrastructure.documents.document_service import convert_to_pdf_buffer
 from src.infrastructure.saludsa_bot.saludsa_bot_service import SaludsaBotService
 from src.utils.formatters import (
     fecha_a_texto,

@@ -1,9 +1,9 @@
 # src/features/actas/helpers.py
 import base64
-from src.services.document_service import (
+from src.infrastructure.documents.document_service import (
     generate_file_docx,
     convert_to_pdf_buffer,
-    convert_to_pdf_libreoffice
+    convert_to_pdf_libreoffice,
 )
 
 def build_document(doc_type: str, context: dict, template: str, filename: str) -> dict:

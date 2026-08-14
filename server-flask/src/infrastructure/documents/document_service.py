@@ -35,7 +35,7 @@ def generate_file_docx(
 
     try:
         template_path = resolve_route(
-            f"src/templates/{template_filename}", is_frontend=False
+            f"src/infrastructure/documents/templates/{template_filename}", is_frontend=False
         )
         doc = DocxTemplate(template_path)
         context["legal_representative_name"] = config.LEGAL_REPRESENTATIVE_NAME

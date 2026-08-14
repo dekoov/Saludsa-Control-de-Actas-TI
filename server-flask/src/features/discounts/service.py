@@ -1,6 +1,6 @@
 from typing import Any
 
-from src.utils.document_builder import build_document
+from src.infrastructure.documents.document_builder import build_document
 from src.utils.formatters import fecha_a_texto_extenso, monto_a_letras
 
 

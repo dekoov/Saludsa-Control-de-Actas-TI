@@ -12,7 +12,7 @@ from src.features.actas.service import ActaDocumentService
 from src.features.drafts.persistence import delete_draft, get_draft_by_id
 from src.features.email import email_service
 from src.models.enums import ActaStatus, EquipmentType
-from src.services.saludsa_bot_service import SaludsaBotService
+from src.infrastructure.saludsa_bot.saludsa_bot_service import SaludsaBotService
 
 logger = logging.getLogger(__name__)
 

@@ -1,11 +1,13 @@
 import os
 import sys
-import webbrowser
 import threading
-from pystray import Icon, Menu, MenuItem
+import webbrowser
+
 from PIL import Image, ImageDraw
+from pystray import Icon, Menu, MenuItem
 
 from src.core.version import CURRENT_VERSION
+
 
 def crear_icono_por_defecto():
     """Genera un icono temporal (un cuadrado azul con bordes redondeados)."""

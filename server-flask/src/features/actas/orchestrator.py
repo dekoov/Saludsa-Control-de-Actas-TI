@@ -11,8 +11,8 @@ from src.features.actas.schemas import validate_acta_payload
 from src.features.actas.service import ActaDocumentService
 from src.features.drafts.persistence import delete_draft, get_draft_by_id
 from src.features.email import email_service
-from src.models.enums import ActaStatus, EquipmentType
 from src.infrastructure.saludsa_bot.saludsa_bot_service import SaludsaBotService
+from src.models.enums import ActaStatus, EquipmentType
 
 logger = logging.getLogger(__name__)
 

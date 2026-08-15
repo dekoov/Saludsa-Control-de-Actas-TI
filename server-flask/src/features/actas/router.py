@@ -1,7 +1,7 @@
 # src/features/actas/actas_route.py
 from flask import Blueprint, request, send_file
+from src.api.responses import error_response, success_response
 from src.core.decorators import requiere_login
-from src.core.responses import error_response, success_response
 from src.features.actas.orchestrator import ActaOrchestrator
 from src.features.actas.service import ActaDocumentService, ActaHistoryService
 

@@ -1,6 +1,6 @@
 from flask import Blueprint
 
-from src.core.responses import success_response, error_response
+from src.api.responses import error_response, success_response
 from src.core.decorators import requiere_login
 from src.infrastructure.updater import updater
 

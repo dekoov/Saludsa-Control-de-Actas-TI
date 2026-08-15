@@ -1,6 +1,6 @@
 from flask import Blueprint, request
+from src.api.responses import error_response, success_response
 from src.core.decorators import requiere_login
-from src.core.responses import error_response, success_response
 from src.features.email import email_service
 
 email_bp = Blueprint("email_bp", __name__)

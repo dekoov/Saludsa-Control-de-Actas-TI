@@ -5,7 +5,7 @@ from typing import Any
 
 from flask import Flask
 
-from src.core.responses import error_response
+from src.api.responses import error_response
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,6 @@ def init_error_handlers(app: Flask):
 
     @app.errorhandler(AppError)
     def handle_app_error(error: AppError):
-        # CORRECCIÓN: Asumimos que tienes importado 'error_response' de src.core.responses
         return error_response(
             message=error.message, details=error.payload, status_code=error.status_code
         )

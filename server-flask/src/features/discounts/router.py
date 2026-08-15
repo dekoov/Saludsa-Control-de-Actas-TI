@@ -1,8 +1,8 @@
 import base64
 
 from flask import Blueprint, request
+from src.api.responses import error_response, success_response
 from src.core.decorators import requiere_login
-from src.core.responses import error_response, success_response
 
 # Importamos el esquema y servicio de este mismo feature
 from src.features.discounts.schemas import validate_discount_payload

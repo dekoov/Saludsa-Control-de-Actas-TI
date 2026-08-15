@@ -1,22 +1,30 @@
+import logging
 import os
 import smtplib
-import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from src.features.email.templates import asunto_dotacion, cuerpo_dotacion, asunto_renovacion, cuerpo_renovacion
+
+from src.config import config
+from src.features.email.templates import (
+    asunto_dotacion,
+    asunto_renovacion,
+    cuerpo_dotacion,
+    cuerpo_renovacion,
+)
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
+
 class EmailService:
     def __init__(self):
         # Read config from env — NO hardcoding
-        self.smtp_server   = os.getenv("SMTP_SERVER")
-        self.smtp_port     = int(os.getenv("SMTP_PORT", 587))
-        self.smtp_user     = os.getenv("SALUDSA_USERNAME") + "@" + os.getenv("EMAIL_DOMAIN", "saludsa.com.ec")
-        self.smtp_password = os.getenv("SALUDSA_PASSWORD")
-        self.from_address  = os.getenv("SMTP_FROM", self.smtp_user)
-        self.email_domain  = os.getenv("EMAIL_DOMAIN", "saludsa.com.ec")
+        self.smtp_server = config.SMTP_SERVER
+        self.smtp_port = config.SMTP_PORT
+        self.smtp_user = config.SALUDSA_USERNAME + "@" + config.EMAIL_DOMAIN
+        self.smtp_password = config.SALUDSA_PASSWORD
+        self.from_address = config.SMTP_FROM
+        self.email_domain = config.EMAIL_DOMAIN
 
     def is_configured(self) -> bool:
         """Verifies that minimum variables are present."""
@@ -38,9 +46,9 @@ class EmailService:
 
         try:
             msg = MIMEMultipart("alternative")
-            msg["From"]    = self.from_address
-            msg["To"]      = to
-            msg["CC"]      = ", ".join(cc)
+            msg["From"] = self.from_address
+            msg["To"] = to
+            msg["CC"] = ", ".join(cc)
             msg["Subject"] = subject
             msg.attach(MIMEText(body, "plain", "utf-8"))
 
@@ -48,7 +56,9 @@ class EmailService:
 
             # Try STARTTLS on port 587 first
             try:
-                with smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=10) as server:
+                with smtplib.SMTP(
+                    self.smtp_server, self.smtp_port, timeout=10
+                ) as server:
                     server.ehlo()
                     server.starttls()
                     server.login(self.smtp_user, self.smtp_password)
@@ -65,10 +75,12 @@ class EmailService:
                     return True
 
         except Exception as e:
-            logger.error(f"EmailService: failed to send email to {to}: {str(e)}")
+            logger.error(f"EmailService: failed to send email to {to}: {e!s}")
             return False
 
-    def send_dotacion_email(self, username: str, full_name: str, tecnico_nombre: str) -> bool:
+    def send_dotacion_email(
+        self, username: str, full_name: str, tecnico_nombre: str
+    ) -> bool:
         """Sends data request email for dotación."""
         cc = self._build_cc_list()
         to = f"{username}@{self.email_domain}"
@@ -76,7 +88,9 @@ class EmailService:
         body = cuerpo_dotacion(full_name, tecnico_nombre)
         return self._send(to, cc, subject, body)
 
-    def send_renovacion_email(self, username: str, full_name: str, tecnico_nombre: str) -> bool:
+    def send_renovacion_email(
+        self, username: str, full_name: str, tecnico_nombre: str
+    ) -> bool:
         """Sends data request email for renovación."""
         cc = self._build_cc_list()
         to = f"{username}@{self.email_domain}"

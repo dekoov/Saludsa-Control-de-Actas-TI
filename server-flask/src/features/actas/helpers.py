@@ -1,9 +1,11 @@
 # src/features/actas/helpers.py
 import base64
-from src.services.document_service import (
-    generate_file_docx,
+
+from src.infrastructure.documents.document_service import (
     convert_to_pdf_buffer,
+    generate_file_docx,
 )
+
 
 def _build_document(doc_type: str, context: dict, template: str, filename: str) -> dict:
     """Función pura: entra template+context, sale dict con buffers listos."""

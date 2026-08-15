@@ -40,7 +40,14 @@ jobs:
         }
         pip install pyinstaller
 
-    - name: 5. Compilar ejecutable con PyInstaller
+    # --- INYECTAR VERSIÓN DEL TAG EN LA APP ---
+    - name: 5.a Generar version.txt desde el tag
+      run: |
+        $version = "${{ github.ref_name }}".TrimStart('v')
+        Set-Content -Path "server-flask/version.txt" -Value $version -NoNewline
+        Write-Output "version.txt generado con la versión: $version"
+
+    - name: 5.b Compilar ejecutable con PyInstaller
       run: |
         cd server-flask
         
@@ -50,6 +57,7 @@ jobs:
         pyinstaller --clean --name "SaludsaActas" --noconfirm --onedir -w `
           --add-data "../client-react/dist;dist" `
           --add-data "src/templates;src/templates" `
+          --add-data "version.txt;." `
           --add-data "$PLAYWRIGHT_DIR\driver;playwright\driver" `
           --hidden-import win32com `
           --hidden-import pythoncom `
@@ -58,18 +66,36 @@ jobs:
           main.py
 
     # --- COMPILAR INSTALADOR FINAL ---
-    - name: 6. Compilar Instalador con Inno Setup de forma nativa
+    - name: 6.a Compilar Instalador con Inno Setup de forma nativa
       run: |
-        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" saludsa.iss
+        $version = "${{ github.ref_name }}".TrimStart('v')
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=$version saludsa.iss
+
+    # --- GENERAR MANIFIESTO DE ACTUALIZACIÓN ---
+    - name: 6.b Generar version.json (manifiesto de auto-actualización)
+      run: |
+        $version = "${{ github.ref_name }}".TrimStart('v')
+        $sha256 = (Get-FileHash "Output/SaludsaActas_Setup.exe" -Algorithm SHA256).Hash.ToLower()
+        $manifest = @{
+          version      = $version
+          sha256       = $sha256
+          url          = "https://github.com/dekoov/Saludsa-Control-de-Actas-TI/releases/latest/download/SaludsaActas_Setup.exe"
+          published_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+        } | ConvertTo-Json
+        Set-Content -Path "Output/version.json" -Value $manifest
+        Write-Output "Manifiesto generado:"
+        Write-Output $manifest
 
     # --- PUBLICAR EN GITHUB ---
-    - name: 7. Crear Release de Prueba en GitHub
+    - name: 7. Crear Release Oficial en GitHub
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ github.ref_name }}
-        name: Saludsa Actas Demo ${{ github.ref_name }}
+        name: Saludsa Actas ${{ github.ref_name }}
         draft: false
-        prerelease: true
-        files: Output/SaludsaActas_Setup.exe
+        prerelease: false
+        files: |
+          Output/SaludsaActas_Setup.exe
+          Output/version.json
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

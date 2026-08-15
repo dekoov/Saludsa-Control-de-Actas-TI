@@ -1,7 +1,7 @@
-from src.core.responses import success_response, error_response
-from flask import Blueprint, jsonify
-from src.features.dashboard.service import get_dashboard_stats, get_recent_users
+from flask import Blueprint
+from src.api.responses import success_response
 from src.core.decorators import requiere_login
+from src.features.dashboard.service import get_dashboard_stats, get_recent_users
 
 dashboard_bp = Blueprint('dashboard_bp', __name__)
 

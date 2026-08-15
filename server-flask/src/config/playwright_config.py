@@ -1,57 +1,110 @@
+import logging
 import os
 import sys
+from pathlib import Path
 
-def check_playwright(application_path: str):
-    """ 
-    Configura las rutas de Playwright. En modo producción (.exe),
-    verifica si Chromium existe; si no, lo descarga e instala de forma
-    aislada en la carpeta de la aplicación la primera vez.
+logger = logging.getLogger(__name__)
+
+APP_NAME = "SaludsaActas"
+BROWSERS_DIR_NAME = "playwright-browsers"
+
+
+def _is_frozen() -> bool:
+    """Indica si la aplicación está ejecutándose como bundle PyInstaller."""
+    return bool(getattr(sys, "frozen", False))
+
+
+def _get_browsers_path() -> Path:
     """
-    print("Verificando estado de Playwright...")
+    Obtiene directorio persistente donde Playwright almacenará navegadores.
+
+    Raises:
+        RuntimeError: Si LOCALAPPDATA no está disponible.
+    """
+    local_app_data = os.environ.get("LOCALAPPDATA")
+
+    if not local_app_data:
+        raise RuntimeError(
+            "LOCALAPPDATA no está disponible; "
+            "no se puede determinar ubicación de navegadores."
+        )
+
+    return Path(local_app_data) / APP_NAME / BROWSERS_DIR_NAME
+
+
+def _chromium_installed(browsers_path: Path) -> bool:
+    """Comprueba si existe una instalación de Chromium de Playwright."""
+    if not browsers_path.is_dir():
+        return False
+
+    return any(
+        item.is_dir() and item.name.startswith("chromium-")
+        for item in browsers_path.iterdir()
+    )
+
+
+def _install_chromium() -> None:
+    """Instala Chromium mediante Playwright."""
+    from playwright.__main__ import main as playwright_main
+
+    original_argv = sys.argv.copy()
+
     try:
-        es_produccion = getattr(sys, 'frozen', False)
+        sys.argv = [
+            "playwright",
+            "install",
+            "chromium",
+        ]
 
-        if es_produccion:
-            # Guardamos los navegadores en la raíz del programa (fuera de _internal por temas de permisos)
-            ruta_navegadores = os.path.join(os.environ["LOCALAPPDATA"], "SaludsaActas", "playwright-browsers")
-            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = ruta_navegadores
-            print(f"Ruta asignada para navegadores (Producción): {ruta_navegadores}")
-            
-            # Comprobamos si Chromium ya fue descargado previamente
-            chromium_instalado = False
-            if os.path.exists(ruta_navegadores):
-                # Buscamos si existe alguna carpeta del tipo 'chromium-1234'
-                for item in os.listdir(ruta_navegadores):
-                    if item.startswith("chromium-"):
-                        chromium_instalado = True
-                        break
-            
-            # Solo ejecutamos la instalación si es la primera vez y la carpeta está vacía
-            if not chromium_instalado:
-                print("Primera ejecución detectada. Descargando Chromium de forma aislada (esto puede tardar)...")
-                
-                # Al haber añadido el driver en el Paso 1, este import ahora sí funcionará con sus binarios
-                from playwright.__main__ import main as playwright_main
-                argumentos_originales = sys.argv       
-                
-                try:
-                    # Forzamos el comando interno: playwright install chromium
-                    sys.argv = ["playwright", "install", "chromium"]
-                    playwright_main()
-                    print("ÉXITO: Chromium se ha descargado y configurado correctamente.")
-                except SystemExit:
-                    print("Verificación de descarga finalizada exitosamente.")
-                finally:
-                    # Restauramos los argumentos para no romper el ciclo de Flask/Waitress
-                    sys.argv = argumentos_originales
-            else:
-                print(f"Chromium detectado en: {ruta_navegadores}. Saltando instalación.")
-                
-        else:
-            print("Modo desarrollo detectado: Usando la instalación nativa del .venv")
-            if "PLAYWRIGHT_BROWSERS_PATH" in os.environ:
-                del os.environ["PLAYWRIGHT_BROWSERS_PATH"]
-            return
+        playwright_main()
 
-    except Exception as e:
-        print(f"ERROR CRÍTICO al inicializar Playwright: {e}")
+    finally:
+        sys.argv = original_argv
+
+
+def check_playwright() -> None:
+    """
+    Configura Playwright y garantiza navegador disponible.
+
+    En desarrollo utiliza configuración normal de Playwright.
+    En PyInstaller utiliza directorio persistente dentro de LOCALAPPDATA.
+    """
+    if not _is_frozen():
+        os.environ.pop("PLAYWRIGHT_BROWSERS_PATH", None)
+        logger.info("Playwright: modo desarrollo.")
+        return
+
+    browsers_path = _get_browsers_path()
+    browsers_path.mkdir(parents=True, exist_ok=True)
+
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_path)
+
+    logger.info(
+        "Playwright: modo empaquetado. Navegadores: %s",
+        browsers_path,
+    )
+
+    if _chromium_installed(browsers_path):
+        logger.info("Playwright: Chromium ya está instalado.")
+        return
+
+    logger.info("Playwright: Chromium no encontrado. Instalando...")
+
+    try:
+        _install_chromium()
+    except SystemExit as exc:
+        if exc.code not in (None, 0):
+            raise RuntimeError(
+                f"Playwright no pudo instalar Chromium. Código: {exc.code}"
+            ) from exc
+    except Exception as exc:
+        raise RuntimeError(
+            "Error durante instalación de Chromium."
+        ) from exc
+
+    if not _chromium_installed(browsers_path):
+        raise RuntimeError(
+            "Playwright terminó instalación, pero Chromium no fue encontrado."
+        )
+
+    logger.info("Playwright: Chromium instalado correctamente.")

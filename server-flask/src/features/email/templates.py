@@ -1,8 +1,10 @@
 def asunto_dotacion(username: str) -> str:
     return f"Dotación de equipo :: {username}"
 
+
 def asunto_renovacion(username: str) -> str:
     return f"Renovación de equipo :: {username}"
+
 
 def cuerpo_dotacion(full_name: str, tecnico_nombre: str) -> str:
     return f"""Estimado/a {full_name},
@@ -26,6 +28,7 @@ Agradecemos su colaboración con este proceso.
 
 Atentamente,
 Área de Tecnología — Saludsa"""
+
 
 def cuerpo_renovacion(full_name: str, tecnico_nombre: str) -> str:
     return f"""Estimado/a {full_name},

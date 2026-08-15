@@ -1,5 +1,6 @@
 from datetime import datetime
-from src.core.db import db
+
+from src.infrastructure.persistence.db import db
 
 # Relationship tables
 acta_activos = db.Table('acta_activos',

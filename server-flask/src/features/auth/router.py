@@ -1,7 +1,7 @@
-from flask import Blueprint, request, session
 import time
 
-from src.core.responses import success_response, error_response
+from flask import Blueprint, request, session
+from src.api.responses import error_response, success_response
 from src.features.auth.service import validar_credenciales
 
 auth_bp = Blueprint('auth_bp', __name__)

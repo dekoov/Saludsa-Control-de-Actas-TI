@@ -1,6 +1,9 @@
 from functools import wraps
+
 from flask import session
-from src.core.responses import error_response
+
+from src.api.responses import error_response
+
 
 def requiere_login(f):
     """

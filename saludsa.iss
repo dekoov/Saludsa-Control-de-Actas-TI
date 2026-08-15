@@ -2,11 +2,20 @@
 ; SCRIPT DE INSTALACIÓN - SALUDSA ACTAS (Actualizado)
 ; ##########################################################################
 
+; La versión se inyecta desde el pipeline con: ISCC.exe /DAppVersion=X.Y.Z
+#ifndef AppVersion
+  #define AppVersion "1.0"
+#endif
+
 [Setup]
 AppName=Saludsa Actas
-AppVersion=1.0
+AppVersion={#AppVersion}
 AppPublisher=Saludsa
 AppId={{8FCE32A5-99B4-4D2A-A12B-7FBEA4D0F89E}}
+
+; Evita que el instalador corra mientras la aplicación está abierta
+; (debe coincidir con el mutex creado en main.py)
+AppMutex=SaludsaActas_Unique_Mutex_ID_300504
 
 ; --- REQUISITO 1: INSTALACIÓN POR USUARIO (SIN ADMINS) ---
 PrivilegesRequired=lowest

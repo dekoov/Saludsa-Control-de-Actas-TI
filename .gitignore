@@ -1,4 +1,5 @@
 **/venv/
+**/.venv/
 **/__pycache__/
 **/node_modules/
 *.pyc
@@ -8,6 +9,7 @@
 *.pyo
 *.pyd
 *pyrightconfig.json
+*python-version
 
 client-react/build/
 client-react/dist/
@@ -16,4 +18,7 @@ client-react/dist/
 */dist/
 *.spec
 *.db
+
+# Generado por el pipeline de release (no commitear)
+server-flask/version.txt
 

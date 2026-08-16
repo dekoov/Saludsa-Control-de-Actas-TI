@@ -86,7 +86,7 @@ jobs:
     # --- GENERAR MANIFIESTO DE ACTUALIZACIÓN ---
     - name: 6.b Generar version.json (manifiesto de auto-actualización)
       run: |
-        $isBeta = "{{ steps.channel.outputs.is_beta }}" -eq "true"
+        $isBeta = "${{ steps.channel.outputs.is_beta }}" -eq "true"
         $manifestName = if ($isBeta) { "version-beta.json" } else { "version.json" }
         $downloadBase = if ($isBeta) {
             "https://github.com/dekoov/Saludsa-Control-de-Actas-TI/releases/download/beta"
@@ -117,6 +117,6 @@ jobs:
         prerelease: ${{ steps.channel.outputs.is_beta }}
         files: |
           Output/SaludsaActas_Setup.exe
-          Output/${{ steps.channel.outputs.is_beta == 'true' && 'version-beta.json || 'version.json' }}
+          Output/${{ steps.channel.outputs.is_beta == 'true' && 'version-beta.json' || 'version.json' }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

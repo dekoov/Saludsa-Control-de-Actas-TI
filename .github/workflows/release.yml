@@ -63,7 +63,7 @@ jobs:
 
         pyinstaller --clean --name "SaludsaActas" --noconfirm --onedir -w `
           --add-data "../client-react/dist;dist" `
-          --add-data "src/templates;src/templates" `
+          --add-data "src/infrastructure/documents/templates;src/infrastructure/documents/templates" `
           --add-data "version.txt;." `
           --add-data "$PLAYWRIGHT_DIR\driver;playwright\driver" `
           --hidden-import win32com `

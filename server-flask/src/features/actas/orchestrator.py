@@ -11,6 +11,7 @@ from src.features.actas.schemas import validate_acta_payload
 from src.features.actas.service import ActaDocumentService
 from src.features.drafts.persistence import delete_draft, get_draft_by_id
 from src.features.email import email_service
+from src.infrastructure.ldap.ldap_manager_resolver import resolve_manager_email
 from src.infrastructure.saludsa_bot.saludsa_bot_service import SaludsaBotService
 from src.models.enums import ActaStatus, EquipmentType
 
@@ -112,7 +113,7 @@ class ActaOrchestrator:
                 equipos=equipment_list,
                 usuario=user_data,
                 generated_docs=docs,
-                estado=estado_final,  # Se guarda el estado real sin importar el bot
+                estado=estado_final,
                 sync_result=sync_result_dict,
             )
             if not acta_id:
@@ -141,6 +142,35 @@ class ActaOrchestrator:
         debe_enviar_email = data_to_process.get(
             "sendEmail", payload.get("sendEmail", False)
         )
+        manager_email = None
+        manager_dn = user_data.get("manager")
+        if not manager_dn:
+            logger.warning(
+                f"[MANAGER_DEBUG] Usuario '{user_data.get('username')}' "
+                f"NO tiene atributo 'manager' en user_data. "
+                f"El email se enviará SIN CC al jefe."
+            )
+        else:
+            logger.info(
+                f"[MANAGER_DEBUG] Usuario '{user_data.get('username')}' "
+                f"tiene manager DN"
+            )
+            try:
+                manager_email = resolve_manager_email(manager_dn)
+                if manager_email:
+                    logger.info(
+                        f"[MANAGER_DEBUG] Manager resuelto: {manager_email}"
+                    )
+                else:
+                    logger.warning(
+                        f"[MANAGER_DEBUG] No se pudo resolver email del manager "
+                        f"para '{user_data.get('username')}'"
+                    )
+            except ExternalServiceError as e:
+                logger.warning(
+                    f"[MANAGER_DEBUG] Error LDAP resolviendo manager "
+                    f"(continuando sin CC): {e.message}"
+                )
 
         if debe_enviar_email:
             username = user_data["username"]
@@ -159,11 +189,11 @@ class ActaOrchestrator:
 
             if tipo == "Renovacion":
                 email_enviado = email_service.send_renovacion_email(
-                    username, full_name, tecnico_nombre
+                    username, full_name, tecnico_nombre, manager_email
                 )
             else:
                 email_enviado = email_service.send_dotacion_email(
-                    username, full_name, tecnico_nombre
+                    username, full_name, tecnico_nombre, manager_email
                 )
 
         return {

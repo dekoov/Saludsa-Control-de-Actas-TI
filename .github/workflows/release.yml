@@ -24,7 +24,6 @@ jobs:
         cd client-react
         npm install
         npm run build
-        # Esto creará la carpeta 'dist' en tiempo de ejecución dentro de la nube
 
     # --- CONFIGURAR PYTHON ---
     - name: 3. Configurar Python
@@ -49,57 +48,45 @@ jobs:
         $isBetaStr = $isBeta.ToString().ToLower()
 
         Set-Content -Path "server-flask/version.txt" -Value $version -NoNewline
-        echo "version=$version" >> $env:GITHUB_OUTPUT 
-        echo "is_beta=$isBetaStr" >> $env:GITHUB_OUTPUT 
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+        echo "is_beta=$isBetaStr" >> $env:GITHUB_OUTPUT
 
         Write-Output "Version: $version | Canal Beta: $isBetaStr"
 
     - name: 5.b Compilar ejecutable con PyInstaller
       run: |
         cd server-flask
-        
-        $PLAYWRIGHT_DIR = python -c "import os, playwright; print(os.path.dirname(playwright.__file__))"
-        echo "La ruta dinámica de Playwright es: $PLAYWRIGHT_DIR"
-
-        pyinstaller --clean --name "SaludsaActas" --noconfirm --onedir -w `
-          --add-data "../client-react/dist;dist" `
-          --add-data "src/infrastructure/documents/templates;src/infrastructure/documents/templates" `
-          --add-data "version.txt;." `
-          --add-data "$PLAYWRIGHT_DIR\driver;playwright\driver" `
-          --hidden-import win32com `
-          --hidden-import pythoncom `
-          --hidden-import docxtpl `
-          --hidden-import playwright `
-          main.py
+        pyinstaller --clean --noconfirm SaludsaActas.spec
 
     # --- COMPILAR EL AGENTE DE ACTUALIZACIÓN ---
     - name: 5.c Compilar SaludsaUpdaterAgent
       run: |
         cd server-flask
         pyinstaller --onefile --name SaludsaUpdaterAgent src/infrastructure/updater/agent_entry.py
- 
+
     # --- COMPILAR INSTALADOR FINAL ---
     - name: 6.a Compilar Instalador con Inno Setup
       run: |
         & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=${{ steps.channel.outputs.version }} saludsa.iss
 
     # --- GENERAR MANIFIESTO DE ACTUALIZACIÓN ---
-    - name: 6.b Generar version.json (manifiesto de auto-actualización)
+    - name: 6.b Generar manifiesto de actualización
       run: |
         $isBeta = "${{ steps.channel.outputs.is_beta }}" -eq "true"
-        $manifestName = if ($isBeta) { "version-beta.json" } else { "version.json" }
-        $downloadBase = if ($isBeta) {
-            "https://github.com/dekoov/Saludsa-Control-de-Actas-TI/releases/download/beta"
-          } else {
-            "https://github.com/dekoov/Saludsa-Control-de-Actas-TI/releases/latest/download"
+
+        if ($isBeta) {
+          $manifestName = "version-beta.json"
+          $downloadUrl = "https://github.com/dekoov/Saludsa-Control-de-Actas-TI/releases/download/${{ github.ref_name }}/SaludsaActas_Setup.exe"
+        } else {
+          $manifestName = "version.json"
+          $downloadUrl = "https://github.com/dekoov/Saludsa-Control-de-Actas-TI/releases/latest/download/SaludsaActas_Setup.exe"
         }
 
-        $version = "${{ github.ref_name }}".TrimStart('v')
         $sha256 = (Get-FileHash "Output/SaludsaActas_Setup.exe" -Algorithm SHA256).Hash.ToLower()
         $manifest = @{
           version      = "${{ steps.channel.outputs.version }}"
           sha256       = $sha256
-          url          = "$downloadBase/SaludsaActas_Setup.exe"
+          url          = $downloadUrl
           published_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
         } | ConvertTo-Json
 
@@ -107,16 +94,38 @@ jobs:
         Write-Output "Manifiesto ($manifestName):"
         Write-Output $manifest
 
-    # --- PUBLICAR EN GITHUB ---
-    - name: 7. Crear Release Oficial en GitHub
+    # --- PUBLICAR RELEASE VERSIONADA ---
+    # Cada tag (stable o beta) crea SU PROPIA release inmutable, con tag_name
+    # reinstalar cualquier beta específica más adelante si hace falta.
+    - name: 7.a Crear release versionada
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ steps.channel.outputs.is_beta == 'true' && 'beta' || github.ref_name }}
-        name: ${{ steps.channel.outputs.is_beta == 'true' && 'CanalBeta' || format('Saludsa Actas {0}', github.ref_name) }}
+        tag_name: ${{ github.ref_name }}
+        name: Saludsa Actas ${{ github.ref_name }}
         draft: false
         prerelease: ${{ steps.channel.outputs.is_beta }}
         files: |
           Output/SaludsaActas_Setup.exe
           Output/${{ steps.channel.outputs.is_beta == 'true' && 'version-beta.json' || 'version.json' }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # --- ACTUALIZAR EL PUNTERO "beta-channel" (solo builds beta) ---
+    # Release FIJO que se reescribe en cada build beta. Contiene el
+    # manifiesto (que ya apunta a la release versionada de arriba) más un
+    # el cliente siempre consulta esta misma URL fija, sin necesitar saber el número
+    # de versión exacto -- pero la versión real que descarga sí queda
+    # archivada de forma permanente en 7.a.
+    - name: 7.b Actualizar puntero del canal beta
+      if: steps.channel.outputs.is_beta == 'true'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: beta-channel
+        name: "Canal Beta (siempre la última)"
+        draft: false
+        prerelease: true
+        files: |
+          Output/version-beta.json
+          Output/SaludsaActas_Setup.exe
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

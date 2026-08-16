@@ -121,7 +121,7 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         tag_name: beta-channel
-        name: "Canal Beta (siempre la última)"
+        name: "Canal Beta Latest"
         draft: false
         prerelease: true
         files: |

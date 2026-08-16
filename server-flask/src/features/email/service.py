@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 class EmailService:
     def __init__(self):
-        # Read config from env — NO hardcoding
         self.smtp_server = config.SMTP_SERVER
         self.smtp_port = config.SMTP_PORT
         self.smtp_user = config.SALUDSA_USERNAME + "@" + config.EMAIL_DOMAIN
@@ -79,20 +78,32 @@ class EmailService:
             return False
 
     def send_dotacion_email(
-        self, username: str, full_name: str, tecnico_nombre: str
+        self,
+        username: str, 
+        full_name: str,
+        tecnico_nombre: str,
+        manager_email: str | None = None
     ) -> bool:
         """Sends data request email for dotación."""
         cc = self._build_cc_list()
+        if manager_email:
+            cc.append(manager_email)
         to = f"{username}@{self.email_domain}"
         subject = asunto_dotacion(username)
         body = cuerpo_dotacion(full_name, tecnico_nombre)
         return self._send(to, cc, subject, body)
 
     def send_renovacion_email(
-        self, username: str, full_name: str, tecnico_nombre: str
+        self,
+        username: str,
+        full_name: str,
+        tecnico_nombre: str,
+        manager_email: str | None = None
     ) -> bool:
         """Sends data request email for renovación."""
         cc = self._build_cc_list()
+        if manager_email:
+            cc.append(manager_email)
         to = f"{username}@{self.email_domain}"
         subject = asunto_renovacion(username)
         body = cuerpo_renovacion(full_name, tecnico_nombre)

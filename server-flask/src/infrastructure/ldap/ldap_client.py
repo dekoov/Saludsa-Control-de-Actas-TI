@@ -22,4 +22,5 @@ def map_ldap_entry_to_user(entry, default_username: str | None = None) -> dict:
         "position": str(entry.Description) if "Description" in entry else None,
         "email": str(entry.mail) if "mail" in entry else None,
         "city": str(entry.l) if "l" in entry else None,
+        "manager": str(entry.manager) if "manager" in entry else None,
     }

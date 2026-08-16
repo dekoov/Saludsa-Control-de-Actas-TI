@@ -44,12 +44,13 @@ export async function searchADUsers(query) {
 export function adUserToUsuario(u) {
   return {
     username: u.username,
-    full_name:
-      u.full_name ||
-      u.display_name ||
-      `${u.first_names ?? ""} ${u.last_names ?? ""}`.trim(),
+    full_name: u.full_name || u.display_name || `${u.first_names ?? ""} ${u.last_names ?? ""}`.trim(),
     national_id: u.national_id,
     city: u.city,
+    position: u.position || "",
+    department: u.department || "",
+    email: u.email || "",
+    manager: u.manager || "",
   };
 }
 

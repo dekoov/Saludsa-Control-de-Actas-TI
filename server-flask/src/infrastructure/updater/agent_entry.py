@@ -72,7 +72,7 @@ def _wait_for_pid_exit(pid: int, timeout_seconds: int) -> bool:
 def _run_installer(installer_path: Path) -> int:
     """Corre el instalador Inno Setup en modo silencioso. Retorna el exit code."""
     result = subprocess.run(
-        [str(installer_path), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"],
+        [str(installer_path), "/VERYSILENT", "/NORESTART", "/SUPPRESSMSGBOXES"],
         capture_output=True,
         text=True,
     )
@@ -99,11 +99,51 @@ def _process_is_alive(proc: subprocess.Popen, seconds: int) -> bool:
 
 
 def _cleanup(installer_path: Path) -> None:
+    """Borra el instalador y las carpetas updates/pending/ vacías."""
     try:
         if installer_path.exists():
             installer_path.unlink()
+
+        # Subir: .../updates/pending/ -> borrar si quedó vacía
+        pending_dir = installer_path.parent
+        if pending_dir.exists() and pending_dir.name.lower() == "pending":
+            try:
+                pending_dir.rmdir()          # solo borra si está vacía
+            except OSError:
+                pass
+
+        # Subir: .../updates/ -> borrar si quedó vacía
+        updates_dir = pending_dir.parent
+        if updates_dir.exists() and updates_dir.name.lower() == "updates":
+            try:
+                updates_dir.rmdir()
+            except OSError:
+                pass
+
     except OSError as e:
         logging.warning(f"No se pudo borrar el instalador temporal: {e}")
+
+def _self_delete() -> None:
+    """
+    Programa el borrado del propio .exe después de que el proceso termine.
+    Como Windows bloquea un .exe en ejecución, lanzamos un proceso cmd
+    desatachado que espera 3 segundos y luego borra el archivo.
+    """
+    try:
+        exe_path = Path(sys.executable).resolve()
+        # Comando silencioso: espera 3s y borra; si aún está bloqueado, reintenta en el próximo arranque
+        cmd = f'cmd /c "timeout /t 3 /nobreak >nul 2>&1 && del \"{exe_path}\" >nul 2>&1"'
+        subprocess.Popen(
+            cmd,
+            shell=True,
+            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        logging.info(f"Auto-eliminación programada para: {exe_path.name}")
+    except Exception as e:
+        logging.warning(f"No se pudo programar auto-eliminación del agente: {e}")
 
 
 def main() -> int:
@@ -157,6 +197,8 @@ def main() -> int:
         _cleanup(args.installer)
         print("Actualización completada con éxito.")
         time.sleep(2)
+        _self_delete()
+        time.sleep(1)
         return 0
     else:
         msg = "La nueva versión se cerró inesperadamente al iniciar."

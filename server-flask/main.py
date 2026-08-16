@@ -3,6 +3,7 @@ import os
 import sys
 
 from dotenv import load_dotenv
+from src.infrastructure.updater.updater import cleanup_updater_runtime
 
 # =======================================
 # 1. CARGAR VARIABLES DE ENTORNO Y RUTAS
@@ -20,6 +21,7 @@ load_dotenv(env_path)
 from src.config import config, resolve_route, setup_logging
 
 setup_logging()
+cleanup_updater_runtime()
 
 import logging
 
@@ -39,14 +41,14 @@ from datetime import timedelta
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from src.config import config
-from src.infrastructure.persistence.db import init_db
 from src.features.actas.router import equipment_bp
+from src.features.ad.router import user_bp
 from src.features.auth.router import auth_bp
 from src.features.dashboard.router import dashboard_bp
 from src.features.discounts.router import discounts_bp
 from src.features.drafts.router import drafts_bp
 from src.features.email.router import email_bp
-from src.features.ad.router import user_bp
+from src.infrastructure.persistence.db import init_db
 from src.infrastructure.updater.router import update_bp
 
 logger = logging.getLogger(__name__)
@@ -55,19 +57,19 @@ logger = logging.getLogger(__name__)
 if not config.validate_ldap_config():
     missing_ldap = config.get_missing_ldap_vars()
     logger.warning(
-        f"⚠️ CONFIGURACIÓN INCOMPLETA: Faltan variables LDAP en el .env: {', '.join(missing_ldap)}"
+        f"CONFIGURACIÓN INCOMPLETA: Faltan variables LDAP en el .env: {', '.join(missing_ldap)}"
     )
 
 if not config.validate_bot_config():
     missing_bot = config.get_missing_bot_vars()
     logger.warning(
-        f"⚠️ CONFIGURACIÓN INCOMPLETA: Faltan credenciales del Bot YoSoySaludsa en el .env: {', '.join(missing_bot)}"
+        f"CONFIGURACIÓN INCOMPLETA: Faltan credenciales del Bot YoSoySaludsa en el .env: {', '.join(missing_bot)}"
     )
 
 if not config.validate_email_config():
     missing_email = config.get_missing_email_vars()
     logger.warning(
-        f"⚠️ CONFIGURACIÓN INCOMPLETA: Faltan variables del servidor SMTP/Correo en el .env: {', '.join(missing_email)}"
+        f"CONFIGURACIÓN INCOMPLETA: Faltan variables del servidor SMTP/Correo en el .env: {', '.join(missing_email)}"
     )
 
 REACT_DIR = resolve_route("dist", is_frontend=True)

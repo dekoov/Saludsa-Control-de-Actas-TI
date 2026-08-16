@@ -46,8 +46,8 @@ INSTALLER_NAME = "SaludsaActas_Setup.exe"
 _REPO_BASE = "https://github.com/dekoov/Saludsa-Control-de-Actas-TI/releases"
 
 if _IS_BETA:
-    MANIFEST_URL = f"{_REPO_BASE}/download/beta/version-beta.json"
-    INSTALLER_FALLBACK_URL = f"{_REPO_BASE}/download/beta/{INSTALLER_NAME}"
+    MANIFEST_URL = f"{_REPO_BASE}/download/beta-channel/version-beta.json"
+    INSTALLER_FALLBACK_URL = f"{_REPO_BASE}/download/beta-channel/{INSTALLER_NAME}"
 else:
     MANIFEST_URL = f"{_REPO_BASE}/latest/download/version.json"
     INSTALLER_FALLBACK_URL = f"{_REPO_BASE}/latest/download/{INSTALLER_NAME}"
@@ -80,6 +80,29 @@ def _update_state(**kwargs):
     with _state_lock:
         _state.update(kwargs)
 
+def cleanup_updater_runtime():
+    """Elimina la copia temporal del updater si quedó de una actualización previa."""
+    if not getattr(sys, 'frozen', False):
+        return
+
+    runtime = Path(sys.executable).parent / "SaludsaUpdaterAgent_runtime.exe"
+    if not runtime.exists():
+        return
+
+    # Reintentos: el agente puede tardar unos segundos en morir después del health-check
+    for attempt in range(1, 4):
+        try:
+            runtime.unlink()
+            print(f"[Updater] Limpieza: {runtime.name} eliminado.")
+            return
+        except PermissionError:
+            if attempt < 3:
+                time.sleep(1.5 * attempt)  # 1.5s, 3s
+            else:
+                logger.warning("No se pudo eliminar la copia temporal (aún en uso). Se reintentará en el próximo arranque.")
+        except Exception:
+            logger.warning("No se pudo eliminar la copia temporal")
+            return
 
 def get_version_info() -> dict:
     """Retorna una copia del estado actual para exponerlo vía API."""
@@ -234,38 +257,44 @@ def _verify_sha256(file_path: str, expected_sha256: str) -> bool:
 
 def _launch_updater(installer_path: str):
     """
-    Lanza SaludsaUpdaterAgent.exe como proceso separado. Reemplaza el enfoque
-    anterior basado en un script .ps1 generado en runtime -- sin dependencia
-    de Execution Policy ni de sesión de escritorio para procesos desacoplados.
-    El agente vive junto a la app principal (mismo directorio de instalación,
-    PrivilegesRequired=lowest, sin necesidad de elevación en ningún punto).
+    Lanza SaludsaUpdaterAgent.exe como proceso separado.
+    Usa una copia temporal (shadow copy) para permitir que el instalador
+    reemplace el agente original durante la actualización.
     """
     if not getattr(sys, "frozen", False):
         logger.warning("No se puede lanzar el updater fuera de la app compilada.")
         return
 
     app_exe_path = Path(sys.executable)
-    agent_path = app_exe_path.parent / UPDATER_AGENT_NAME
+    original_agent = app_exe_path.parent / UPDATER_AGENT_NAME
+    runtime_agent = app_exe_path.parent / "SaludsaUpdaterAgent_runtime.exe"
 
-    if not agent_path.exists():
-        logger.error(f"No se encontró {UPDATER_AGENT_NAME} en {agent_path}")
+    if not original_agent.exists():
+        logger.error(f"No se encontró {UPDATER_AGENT_NAME} en {original_agent}")
         _update_state(applying=False, error="No se encontró el componente de actualización")
         return
 
+    # Crear shadow copy para que el instalador pueda reemplazar el original
+    try:
+        import shutil
+        shutil.copy2(original_agent, runtime_agent)
+        launch_target = runtime_agent
+        logger.info(f"Shadow copy del agente creada: {runtime_agent}")
+    except Exception as e:
+        logger.warning(f"No se pudo crear copia runtime del agente ({e}), usando original.")
+        launch_target = original_agent
+
     subprocess.Popen(
         [
-            str(agent_path),
+            str(launch_target),
             "--pid", str(os.getpid()),
             "--installer", installer_path,
             "--app-exe", str(app_exe_path),
         ],
-        # El agente muestra su propia consola (placeholder de progreso).
-        # La app principal corre con -w (sin consola), así que forzamos una
-        # consola nueva para el agente en vez de intentar heredar una.
         creationflags=subprocess.CREATE_NEW_CONSOLE,
         close_fds=True,
     )
-    logger.info(f"SaludsaUpdaterAgent lanzado (PID actual: {os.getpid()}, agente: {agent_path})")
+    logger.info(f"SaludsaUpdaterAgent lanzado desde: {launch_target} (PID actual: {os.getpid()})")
 
 
 def start_update_scheduler():

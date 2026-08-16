@@ -33,6 +33,11 @@ export default function UpdateBanner() {
           <div>
             <p className="text-sm font-semibold text-foreground">
               Nueva versión disponible: v{latestVersion}
+              {/beta|alpha|rc/i.test(currentVersion) &&(
+                <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
+                  CANAL BETA
+                </span>
+              )}
             </p>
             <p className="text-xs text-muted-foreground">
               {applying
@@ -82,7 +87,7 @@ export default function UpdateBanner() {
         </div>
       )}
 
-      {error && !applying && (
+      {error && (
         <div className="mt-3 flex items-center gap-2 text-xs text-destructive">
           <AlertCircle className="h-4 w-4" />
           {error}

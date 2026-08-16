@@ -40,6 +40,7 @@ DirExistsWarning=no
 Source: "server-flask\dist\SaludsaActas\SaludsaActas.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Copia el resto de archivos necesarios
 Source: "server-flask\dist\SaludsaActas\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "server-flask\dist\SaludsaUpdaterAgent.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 ; --- REQUISITO 3: MENÚ INICIO Y ACCESO DIRECTO ---

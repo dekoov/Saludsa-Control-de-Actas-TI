@@ -1,5 +1,6 @@
 **/venv/
 **/.venv/
+**/comprobantes/
 **/__pycache__/
 **/node_modules/
 *.pyc
@@ -14,6 +15,7 @@
 client-react/build/
 client-react/dist/
 
+/Output/
 */build/
 */dist/
 *.spec

@@ -1,6 +1,6 @@
 import threading
 
-from pystray import Icon, Menu
+from pystray import Icon, Menu, MenuItem
 
 from src.core.version import CURRENT_VERSION
 from src.infrastructure.tray.icon_factory import cargar_icono

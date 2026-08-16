@@ -18,7 +18,6 @@ client-react/dist/
 /Output/
 */build/
 */dist/
-*.spec
 *.db
 
 # Generado por el pipeline de release (no commitear)

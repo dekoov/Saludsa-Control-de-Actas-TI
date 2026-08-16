@@ -3,13 +3,13 @@ Núcleo del sistema de auto-actualización.
 
 Flujo general:
 1. check_for_updates(): descarga version.json desde la URL pública del último
-   release de GitHub (sin usar la API → sin rate limits) y compara versiones
+   release de GitHub (sin usar la API -> sin rate limits) y compara versiones
    con packaging.version.
 2. request_apply_update(): lanza en segundo plano la descarga del instalador a
-   %TEMP% con progreso y verificación SHA-256.
-3. Al terminar la descarga se escribe y lanza updater.ps1 desacoplado
-   (DETACHED_PROCESS) y la app se cierra 1.5s después; el script espera al
-   cierre, instala en modo /VERYSILENT y reabre la aplicación.
+   una carpeta temporal dentro del directorio de la app con fallback a %TEMP% con progreso y verificación SHA-256.
+3. Al terminar la descarga se lanza SaludsaUpdaterAgent.exe como proceso
+   separado (Python puro, sin PowerShell) y la app se cierra 1.5s después;
+   el agente espera el cierre, instala en modo /VERYSILENT y reabre la app.
 
 El chequeo programado (scheduler) solo se activa en la app compilada
 (sys.frozen). En desarrollo local nunca se ofrecen actualizaciones.
@@ -19,6 +19,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -26,6 +27,7 @@ import threading
 import time
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import Path
 
 from packaging.version import InvalidVersion, Version
 
@@ -33,49 +35,30 @@ from src.core.version import CURRENT_VERSION
 
 logger = logging.getLogger(__name__)
 
+# Canal de actualizaciones: se detecta a partir del propio version.txt
+# embebido al compilar (ej. "1.2.3-beta.1"), no de una variable de entorno.
+# Así el binario sabe qué canal le corresponde desde que se compiló -- nadie
+# puede olvidarse de setear algo y terminar mezclando canales sin querer.
+_IS_BETA = bool(re.search(r"-(beta|alpha|rc|dev)", CURRENT_VERSION, re.IGNORECASE))
+
 # URL web estable del manifiesto del último release (NO usa la API de GitHub)
-MANIFEST_URL = "https://github.com/dekoov/Saludsa-Control-de-Actas-TI/releases/latest/download/version.json"
 INSTALLER_NAME = "SaludsaActas_Setup.exe"
-INSTALLER_FALLBACK_URL = f"https://github.com/dekoov/Saludsa-Control-de-Actas-TI/releases/latest/download/{INSTALLER_NAME}"
+_REPO_BASE = "https://github.com/dekoov/Saludsa-Control-de-Actas-TI/releases"
+
+if _IS_BETA:
+    MANIFEST_URL = f"{_REPO_BASE}/download/beta-channel/version-beta.json"
+    INSTALLER_FALLBACK_URL = f"{_REPO_BASE}/download/beta-channel/{INSTALLER_NAME}"
+else:
+    MANIFEST_URL = f"{_REPO_BASE}/latest/download/version.json"
+    INSTALLER_FALLBACK_URL = f"{_REPO_BASE}/latest/download/{INSTALLER_NAME}"
+
+UPDATER_AGENT_NAME = "SaludsaUpdaterAgent.exe"
 
 CHECK_TIMEOUT = 10          # segundos para el chequeo de versión
 DOWNLOAD_TIMEOUT = 60       # segundos por lectura durante la descarga
 CHECK_INTERVAL = 4 * 3600   # 4 horas
 CHECK_START_DELAY = 15      # primer chequeo a los 15 segundos del arranque
 SHUTDOWN_DELAY = 1.5        # cierre de la app tras lanzar el updater
-
-# Script de actualización totalmente parametrizado (no requiere interpolación)
-UPDATER_PS1 = r"""param(
-    [Parameter(Mandatory=$true)][int]$ProcessId,
-    [Parameter(Mandatory=$true)][string]$InstallerPath,
-    [Parameter(Mandatory=$true)][string]$AppExePath
-)
-
-$ErrorActionPreference = 'SilentlyContinue'
-
-# 1. Esperar a que la aplicacion se cierre por completo (max. 60 s)
-$elapsed = 0
-while ((Get-Process -Id $ProcessId) -and ($elapsed -lt 60000)) {
-    Start-Sleep -Milliseconds 500
-    $elapsed += 500
-}
-Start-Sleep -Seconds 2
-
-# 2. Quitar la marca de "descargado de internet" (mitiga SmartScreen)
-Unblock-File -Path $InstallerPath
-
-# 3. Ejecutar el instalador en modo totalmente silencioso
-Start-Process -FilePath $InstallerPath -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
-
-# 4. Reabrir la aplicacion actualizada
-if (Test-Path $AppExePath) {
-    Start-Process -FilePath $AppExePath
-}
-
-# 5. Limpieza de temporales
-Remove-Item -Path $InstallerPath -Force
-Remove-Item -Path $MyInvocation.MyCommand.Path -Force
-"""
 
 # Estado en memoria del sistema de actualización
 _state = {
@@ -97,6 +80,29 @@ def _update_state(**kwargs):
     with _state_lock:
         _state.update(kwargs)
 
+def cleanup_updater_runtime():
+    """Elimina la copia temporal del updater si quedó de una actualización previa."""
+    if not getattr(sys, 'frozen', False):
+        return
+
+    runtime = Path(sys.executable).parent / "SaludsaUpdaterAgent_runtime.exe"
+    if not runtime.exists():
+        return
+
+    # Reintentos: el agente puede tardar unos segundos en morir después del health-check
+    for attempt in range(1, 4):
+        try:
+            runtime.unlink()
+            print(f"[Updater] Limpieza: {runtime.name} eliminado.")
+            return
+        except PermissionError:
+            if attempt < 3:
+                time.sleep(1.5 * attempt)  # 1.5s, 3s
+            else:
+                logger.warning("No se pudo eliminar la copia temporal (aún en uso). Se reintentará en el próximo arranque.")
+        except Exception:
+            logger.warning("No se pudo eliminar la copia temporal")
+            return
 
 def get_version_info() -> dict:
     """Retorna una copia del estado actual para exponerlo vía API."""
@@ -112,7 +118,6 @@ def check_for_updates() -> bool:
     si hay una versión más nueva disponible. Los errores de red son silenciosos.
     Retorna True si hay actualización disponible.
     """
-    # La auto-actualización solo aplica a la app instalada/compilada
     if not getattr(sys, 'frozen', False):
         logger.debug("Chequeo de actualizaciones omitido: entorno de desarrollo.")
         return False
@@ -147,7 +152,6 @@ def check_for_updates() -> bool:
     except (InvalidVersion, KeyError, json.JSONDecodeError) as e:
         logger.warning(f"Manifiesto de actualización inválido: {e}")
     except Exception as e:
-        # Errores de red silenciosos: no deben interrumpir el uso de la app
         logger.warning(f"No se pudo comprobar actualizaciones (se reintentará luego): {e}")
 
     _update_state(last_check=datetime.now(timezone.utc).isoformat())
@@ -175,12 +179,30 @@ def request_apply_update():
     return True, f"Descargando actualización v{info['latest_version']}..."
 
 
+def _get_update_dir() -> str:
+    """
+    Directorio de descarga de actualizaciones, DENTRO de la propia carpeta
+    de instalación -- no en %TEMP%. Descargar y ejecutar un .exe desde el
+    temp del sistema es un patrón que EDR/antivirus corporativo (Defender
+    ATP, CrowdStrike, etc.) suele marcar como sospechoso por default, sin
+    importar que sea benigno. Con PrivilegesRequired=lowest la carpeta de
+    instalación ya es escribible sin fricción, así que no hay motivo real
+    para usar %TEMP%.
+    """
+    if getattr(sys, "frozen", False):
+        install_dir = Path(sys.executable).parent
+    else:
+        install_dir = Path(tempfile.gettempdir())  # solo como fallback en dev
+    update_dir = install_dir / "updates" / "pending"
+    update_dir.mkdir(parents=True, exist_ok=True)
+    return str(update_dir)
+
+
 def _download_and_apply():
-    """Descarga el instalador, verifica su integridad y lanza el updater."""
+    """Descarga el instalador, verifica su integridad y lanza el agente de actualización."""
     try:
         info = get_version_info()
-        update_dir = os.path.join(tempfile.gettempdir(), "SaludsaActas_Update")
-        os.makedirs(update_dir, exist_ok=True)
+        update_dir = _get_update_dir()
         installer_path = os.path.join(update_dir, f"SaludsaActas_Setup_v{info['latest_version']}.exe")
 
         logger.info(f"Descargando instalador v{info['latest_version']} desde {info['download_url']}")
@@ -234,31 +256,45 @@ def _verify_sha256(file_path: str, expected_sha256: str) -> bool:
 
 
 def _launch_updater(installer_path: str):
-    """Escribe updater.ps1 en %TEMP% y lo lanza como proceso desacoplado."""
-    update_dir = os.path.dirname(installer_path)
-    script_path = os.path.join(update_dir, "updater.ps1")
-    with open(script_path, 'w', encoding='utf-8') as f:
-        f.write(UPDATER_PS1)
+    """
+    Lanza SaludsaUpdaterAgent.exe como proceso separado.
+    Usa una copia temporal (shadow copy) para permitir que el instalador
+    reemplace el agente original durante la actualización.
+    """
+    if not getattr(sys, "frozen", False):
+        logger.warning("No se puede lanzar el updater fuera de la app compilada.")
+        return
 
-    DETACHED_PROCESS = 0x00000008
-    CREATE_NEW_PROCESS_GROUP = 0x00000200
-    CREATE_NO_WINDOW = 0x08000000
+    app_exe_path = Path(sys.executable)
+    original_agent = app_exe_path.parent / UPDATER_AGENT_NAME
+    runtime_agent = app_exe_path.parent / "SaludsaUpdaterAgent_runtime.exe"
+
+    if not original_agent.exists():
+        logger.error(f"No se encontró {UPDATER_AGENT_NAME} en {original_agent}")
+        _update_state(applying=False, error="No se encontró el componente de actualización")
+        return
+
+    # Crear shadow copy para que el instalador pueda reemplazar el original
+    try:
+        import shutil
+        shutil.copy2(original_agent, runtime_agent)
+        launch_target = runtime_agent
+        logger.info(f"Shadow copy del agente creada: {runtime_agent}")
+    except Exception as e:
+        logger.warning(f"No se pudo crear copia runtime del agente ({e}), usando original.")
+        launch_target = original_agent
 
     subprocess.Popen(
         [
-            "powershell.exe",
-            "-NoProfile",
-            "-ExecutionPolicy", "Bypass",
-            "-WindowStyle", "Hidden",
-            "-File", script_path,
-            "-ProcessId", str(os.getpid()),
-            "-InstallerPath", installer_path,
-            "-AppExePath", sys.executable,
+            str(launch_target),
+            "--pid", str(os.getpid()),
+            "--installer", installer_path,
+            "--app-exe", str(app_exe_path),
         ],
-        creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW,
+        creationflags=subprocess.CREATE_NEW_CONSOLE,
         close_fds=True,
     )
-    logger.info(f"Updater lanzado (PID actual: {os.getpid()}, script: {script_path})")
+    logger.info(f"SaludsaUpdaterAgent lanzado desde: {launch_target} (PID actual: {os.getpid()})")
 
 
 def start_update_scheduler():

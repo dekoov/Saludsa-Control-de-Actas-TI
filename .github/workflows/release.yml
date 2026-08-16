@@ -3,7 +3,7 @@ name: Prueba de Compilación y Release Completo
 on:
   push:
     tags:
-      - 'v*' # Se dispara solo cuando subes un tag como v1.0.0
+      - 'v*' # Matchea v1.2.3 (stable) y v1.2.3-beta.1 / -alpha.1 / -rc.1 (beta)
 
 jobs:
   build:
@@ -24,7 +24,6 @@ jobs:
         cd client-react
         npm install
         npm run build
-        # Esto creará la carpeta 'dist' en tiempo de ejecución dentro de la nube
 
     # --- CONFIGURAR PYTHON ---
     - name: 3. Configurar Python
@@ -40,62 +39,93 @@ jobs:
         }
         pip install pyinstaller
 
-    # --- INYECTAR VERSIÓN DEL TAG EN LA APP ---
+    # --- DETECTAR CANAL E INYECTAR VERSIÓN DEL TAG EN LA APP ---
     - name: 5.a Generar version.txt desde el tag
+      id: channel
       run: |
         $version = "${{ github.ref_name }}".TrimStart('v')
+        $isBeta = ($version -match '-(beta|alpha|rc|dev)')
+        $isBetaStr = $isBeta.ToString().ToLower()
+
         Set-Content -Path "server-flask/version.txt" -Value $version -NoNewline
-        Write-Output "version.txt generado con la versión: $version"
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+        echo "is_beta=$isBetaStr" >> $env:GITHUB_OUTPUT
+
+        Write-Output "Version: $version | Canal Beta: $isBetaStr"
 
     - name: 5.b Compilar ejecutable con PyInstaller
       run: |
         cd server-flask
-        
-        $PLAYWRIGHT_DIR = python -c "import os, playwright; print(os.path.dirname(playwright.__file__))"
-        echo "La ruta dinámica de Playwright es: $PLAYWRIGHT_DIR"
+        pyinstaller --clean --noconfirm SaludsaActas.spec
 
-        pyinstaller --clean --name "SaludsaActas" --noconfirm --onedir -w `
-          --add-data "../client-react/dist;dist" `
-          --add-data "src/templates;src/templates" `
-          --add-data "version.txt;." `
-          --add-data "$PLAYWRIGHT_DIR\driver;playwright\driver" `
-          --hidden-import win32com `
-          --hidden-import pythoncom `
-          --hidden-import docxtpl `
-          --hidden-import playwright `
-          main.py
+    # --- COMPILAR EL AGENTE DE ACTUALIZACIÓN ---
+    - name: 5.c Compilar SaludsaUpdaterAgent
+      run: |
+        cd server-flask
+        pyinstaller --onefile --name SaludsaUpdaterAgent src/infrastructure/updater/agent_entry.py
 
     # --- COMPILAR INSTALADOR FINAL ---
-    - name: 6.a Compilar Instalador con Inno Setup de forma nativa
+    - name: 6.a Compilar Instalador con Inno Setup
       run: |
-        $version = "${{ github.ref_name }}".TrimStart('v')
-        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=$version saludsa.iss
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=${{ steps.channel.outputs.version }} saludsa.iss
 
     # --- GENERAR MANIFIESTO DE ACTUALIZACIÓN ---
-    - name: 6.b Generar version.json (manifiesto de auto-actualización)
+    - name: 6.b Generar manifiesto de actualización
       run: |
-        $version = "${{ github.ref_name }}".TrimStart('v')
+        $isBeta = "${{ steps.channel.outputs.is_beta }}" -eq "true"
+
+        if ($isBeta) {
+          $manifestName = "version-beta.json"
+          $downloadUrl = "https://github.com/dekoov/Saludsa-Control-de-Actas-TI/releases/download/${{ github.ref_name }}/SaludsaActas_Setup.exe"
+        } else {
+          $manifestName = "version.json"
+          $downloadUrl = "https://github.com/dekoov/Saludsa-Control-de-Actas-TI/releases/latest/download/SaludsaActas_Setup.exe"
+        }
+
         $sha256 = (Get-FileHash "Output/SaludsaActas_Setup.exe" -Algorithm SHA256).Hash.ToLower()
         $manifest = @{
-          version      = $version
+          version      = "${{ steps.channel.outputs.version }}"
           sha256       = $sha256
-          url          = "https://github.com/dekoov/Saludsa-Control-de-Actas-TI/releases/latest/download/SaludsaActas_Setup.exe"
+          url          = $downloadUrl
           published_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
         } | ConvertTo-Json
-        Set-Content -Path "Output/version.json" -Value $manifest
-        Write-Output "Manifiesto generado:"
+
+        Set-Content -Path "Output/$manifestName" -Value $manifest
+        Write-Output "Manifiesto ($manifestName):"
         Write-Output $manifest
 
-    # --- PUBLICAR EN GITHUB ---
-    - name: 7. Crear Release Oficial en GitHub
+    # --- PUBLICAR RELEASE VERSIONADA ---
+    # Cada tag (stable o beta) crea SU PROPIA release inmutable, con tag_name
+    # reinstalar cualquier beta específica más adelante si hace falta.
+    - name: 7.a Crear release versionada
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ github.ref_name }}
         name: Saludsa Actas ${{ github.ref_name }}
         draft: false
-        prerelease: false
+        prerelease: ${{ steps.channel.outputs.is_beta }}
         files: |
           Output/SaludsaActas_Setup.exe
-          Output/version.json
+          Output/${{ steps.channel.outputs.is_beta == 'true' && 'version-beta.json' || 'version.json' }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # --- ACTUALIZAR EL PUNTERO "beta-channel" (solo builds beta) ---
+    # Release FIJO que se reescribe en cada build beta. Contiene el
+    # manifiesto (que ya apunta a la release versionada de arriba) más un
+    # el cliente siempre consulta esta misma URL fija, sin necesitar saber el número
+    # de versión exacto -- pero la versión real que descarga sí queda
+    # archivada de forma permanente en 7.a.
+    - name: 7.b Actualizar puntero del canal beta
+      if: steps.channel.outputs.is_beta == 'true'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: beta-channel
+        name: "Canal Beta Latest"
+        draft: false
+        prerelease: true
+        files: |
+          Output/version-beta.json
+          Output/SaludsaActas_Setup.exe
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

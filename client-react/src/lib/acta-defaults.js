@@ -3,6 +3,7 @@ export const EMPTY_USER = {
   full_name: "",
   national_id: "",
   city: "",
+  manager: "",
 };
 
 export function emptyMainEquipo() {

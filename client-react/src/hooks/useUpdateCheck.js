@@ -8,7 +8,6 @@ const BASE_URL =
 const POLL_NORMAL_MS = 5 * 60 * 1000;   // Cada 5 minutos en reposo
 const POLL_APPLYING_MS = 1000;          // Cada segundo mientras se actualiza
 const STUCK_TIMEOUT_MS = 90 * 1000;     // Si sigue "applying" pasado esto, avisar
-const isBeta = /-(beta|alpha|rc|dev)/i.test(state.currentVersion ?? "");
 
 /**
  * Hook que consulta el estado de actualización de la aplicación.

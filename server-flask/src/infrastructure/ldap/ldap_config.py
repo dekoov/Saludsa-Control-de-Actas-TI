@@ -1,3 +1,9 @@
+"""Configuración y creación de conexiones LDAP/Active Directory.
+
+Este módulo encapsula la lógica para abrir conexiones autenticadas contra un
+servidor LDAP usando credenciales almacenadas en la sesión Flask o
+proporcionadas explícitamente.
+"""
 import logging
 
 from flask import session
@@ -11,17 +17,30 @@ from src.infrastructure.ldap.ldap_helpers import obtener_upn_dinamico
 logger = logging.getLogger(__name__)
 
 
-def create_ldap_connection(upn=None, password=None):
-    """
-    Crea y retorna una conexión LDAP dinámica utilizando el UPN calculado por el helper.
+def create_ldap_connection(
+    upn: str | None = None,
+    password: str | None = None,
+) -> Connection:
+    """Crea y retorna una conexión LDAP autenticada.
+
+    Si no se reciben credenciales explícitas, las obtiene de la sesión Flask
+    (``tecnico_actual`` y ``ldap_password``) y calcula el UPN dinámicamente a
+    partir del ``username`` del técnico.
 
     Args:
-        upn: UPN completo (opcional). Si no se provee, se calcula desde la sesión Flask.
-        password: Contraseña (opcional). Si no se provee, se toma de la sesión Flask.
+        upn: UPN completo del usuario (opcional). Si no se provee, se calcula
+            desde la sesión Flask.
+        password: Contraseña del usuario (opcional). Si no se provee, se toma
+            de la sesión Flask.
+
+    Returns:
+        Connection: Conexión LDAP autenticada y lista para usar.
 
     Raises:
-        ValidationError: Si no hay sesión activa o faltan credenciales del técnico.
-        ExternalServiceError: Si falta configuración del servidor o falla la conexión/bind LDAP.
+        ValidationError: Si no hay sesión activa o faltan credenciales del
+            técnico.
+        ExternalServiceError: Si falta la configuración del servidor LDAP o
+            falla el bind/conexión.
     """
     if not upn or not password:
         tecnico = session.get("tecnico_actual")

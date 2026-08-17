@@ -1,3 +1,19 @@
+"""Punto de entrada del backend Flask de Control de Actas TI — Saludsa.
+
+Este módulo realiza la inicialización completa de la aplicación Flask:
+
+1. Carga las variables de entorno desde ``.env`` y detecta si la aplicación
+   corre como ejecutable PyInstaller o en desarrollo local.
+2. Configura logging, valida configuraciones críticas (LDAP, bot, correo),
+   inicializa la base de datos, registra los blueprints de la API y sirve el
+   frontend React empaquetado.
+3. En el punto de entrada protegido ``if __name__ == "__main__"`` se gestiona
+   la instancia única en Windows, se verifica el entorno de Playwright, se
+   lanza el icono de la bandeja del sistema y se inicia el servidor web
+   (waitress en producción o Werkzeug en desarrollo), siempre restringido a
+   loopback.
+"""
+
 import multiprocessing
 import os
 import sys
@@ -36,7 +52,7 @@ logger.info("Variables de entorno cargadas; inicio de aplicación SaludsaActas")
 import logging
 from datetime import timedelta
 
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 from src.config import config
 from src.features.actas.router import equipment_bp
@@ -107,12 +123,35 @@ app.register_blueprint(update_bp)
 
 
 @app.route("/")
-def home():
+def home() -> Response:
+    """Sirve la aplicación React en la ruta raíz ``/``.
+
+    Returns:
+        Respuesta de Flask con el contenido de ``index.html`` del frontend.
+
+    Response codes:
+        200: Página principal servida correctamente.
+        404: No se encontró ``index.html`` en la carpeta estática.
+        500: Error interno al leer el archivo estático.
+    """
     return app.send_static_file("index.html")
 
 
 @app.errorhandler(404)
-def serve_react_on_404(e):
+def serve_react_on_404(e: Exception) -> tuple[Response, int]:
+    """Maneja errores 404 sirviendo el frontend o una respuesta JSON de API.
+
+    Si la ruta no encontrada comienza con ``/api/``, retorna un error JSON.
+    En cualquier otro caso, delega la ruta al frontend React para permitir
+    el enrutamiento del lado del cliente.
+
+    Args:
+        e: Excepción HTTP 404 capturada por Flask.
+
+    Returns:
+        Tupla ``(Response, int)`` con la respuesta adecuada y su código de
+        estado HTTP.
+    """
     if request.path.startswith("/api/"):
         return jsonify({"error": "API endpoint no encontrado"}), 404
     return app.send_static_file("index.html")
@@ -123,6 +162,21 @@ def serve_react_on_404(e):
 # =======================================
 # Todo lo que está aquí adentro SOLO se ejecutará 1 vez por el proceso maestro
 if __name__ == "__main__":
+    """Inicia la aplicación como proceso maestro.
+
+    Este bloque se ejecuta únicamente cuando el archivo se ejecuta
+directamente. Sus responsabilidades son:
+
+    1. Habilitar ``multiprocessing.freeze_support()`` para ejecutables de
+       Windows generados con PyInstaller.
+    2. Garantizar una única instancia de la aplicación mediante un mutex de
+       Windows cuando corre como ejecutable.
+    3. Verificar que Playwright tenga Chromium disponible.
+    4. Inicializar el icono de la bandeja del sistema (system tray).
+    5. Arrancar el programador de auto-actualizaciones.
+    6. Levantar el servidor WSGI, siempre restringido a ``127.0.0.1``.
+    """
+
     # 1. Soporte vital para procesos de Windows compilados (LÍNEA 1 ABSOLUTA)
     multiprocessing.freeze_support()
 

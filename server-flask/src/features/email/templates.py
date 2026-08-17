@@ -1,12 +1,44 @@
+"""Plantillas de texto para correos electrónicos.
+
+Contiene funciones puras que generan asuntos y cuerpos de correos para los
+procesos de dotación y renovación de equipos de TI.
+"""
+
+
 def asunto_dotacion(username: str) -> str:
+    """Retorna el asunto del correo de dotación.
+
+    Args:
+        username: Nombre de usuario del empleado.
+
+    Returns:
+        str: Asunto formateado.
+    """
     return f"Dotación de equipo :: {username}"
 
 
 def asunto_renovacion(username: str) -> str:
+    """Retorna el asunto del correo de renovación.
+
+    Args:
+        username: Nombre de usuario del empleado.
+
+    Returns:
+        str: Asunto formateado.
+    """
     return f"Renovación de equipo :: {username}"
 
 
 def cuerpo_dotacion(full_name: str, tecnico_nombre: str) -> str:
+    """Retorna el cuerpo del correo de dotación.
+
+    Args:
+        full_name: Nombre completo del empleado destinatario.
+        tecnico_nombre: Nombre del técnico responsable del proceso.
+
+    Returns:
+        str: Cuerpo del correo en texto plano.
+    """
     return f"""Estimado/a {full_name},
 
 Le informamos que el área de TI ha iniciado el proceso de dotación de su nuevo equipo de cómputo.
@@ -31,6 +63,15 @@ Atentamente,
 
 
 def cuerpo_renovacion(full_name: str, tecnico_nombre: str) -> str:
+    """Retorna el cuerpo del correo de renovación.
+
+    Args:
+        full_name: Nombre completo del empleado destinatario.
+        tecnico_nombre: Nombre del técnico responsable del proceso.
+
+    Returns:
+        str: Cuerpo del correo en texto plano.
+    """
     return f"""Estimado/a {full_name},
 
 Le informamos que su equipo de cómputo será renovado como parte del plan de actualización tecnológica

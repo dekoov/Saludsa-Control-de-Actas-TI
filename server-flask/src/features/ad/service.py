@@ -1,7 +1,16 @@
+"""Servicio de integración con Active Directory.
+
+Realiza búsquedas de usuarios en el directorio activo (LDAP/AD) utilizando una
+conexión delegada desde la configuración del proyecto. Mapea las entradas LDAP
+a diccionarios de usuario según el esquema definido en el cliente LDAP.
+"""
+
 import logging
+from typing import Any
 
 from ldap3 import SUBTREE
 from ldap3.core.exceptions import LDAPExceptionError
+
 from src.config.config import config
 from src.core.exceptions import ExternalServiceError
 from src.infrastructure.ldap.ldap_client import map_ldap_entry_to_user
@@ -10,12 +19,24 @@ from src.infrastructure.ldap.ldap_config import create_ldap_connection
 logger = logging.getLogger(__name__)
 
 
-def search_user_ad(query):
+def search_user_ad(query: str) -> list[dict[str, Any]]:
+    """Busca usuarios en Active Directory.
+
+    Si la consulta contiene más de una palabra, realiza una búsqueda por
+    coincidencia parcial en displayName combinando todos los tokens. Si es una
+    sola palabra, busca por sAMAccountName o displayName.
+
+    Args:
+        query: Texto de búsqueda (nombre completo, usuario, etc.).
+
+    Returns:
+        list[dict[str, Any]]: Lista de usuarios mapeados desde las entradas LDAP.
+
+    Raises:
+        ExternalServiceError: Si falla la conexión o búsqueda en el directorio
+            activo, o si ocurre un error inesperado.
     """
-    Función principal para realizar la búsqueda en Active Directory.
-    Utiliza conexión delegada inteligente desde config.
-    """
-    results = []
+    results: list[dict[str, Any]] = []
     search_base = config.LDAP_BASE_DN
     tokens = query.strip().split()
     conn = None

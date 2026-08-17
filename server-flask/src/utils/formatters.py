@@ -69,15 +69,31 @@ def fecha_a_texto(fecha=None):
 
 def monto_a_letras(monto, incluir_centavos=True):
     """
-    Convierte un número a formato legal de moneda.
-    Si incluir_centavos es True: 150.50 -> 'CIENTO CINCUENTA CON 50/100'
-    Si incluir_centavos es False: 150.00 -> 'CIENTO CINCUENTA'
+    Convierte un valor numérico a texto legal en dólares y centavos.
+    Ejemplo: 12.50 -> 'DOCE DÓLARES CON CINCUENTA CENTAVOS'
     """
-    entero = int(monto)
-    letras = num2words(entero, lang='es').upper()
+    monto_str = f"{float(monto):.2f}"
+    entero_str, decimal_str = monto_str.split('.')
     
-    if incluir_centavos:
-        centavos = int(round((monto - entero) * 100))
-        return f"{letras} CON {centavos:02d}/100"
+    entero = int(entero_str)
+    centavos = int(decimal_str)
     
-    return letras
+    if entero == 1:
+        texto_dolares = "UN DÓLAR"
+    else:
+        letras_entero = num2words(entero, lang='es').upper()
+        if letras_entero.endswith("UNO"):
+            letras_entero = letras_entero[:-1] # Eliminamos la 'O'
+        texto_dolares = f"{letras_entero} DÓLARES"
+        
+    if centavos == 0:
+        texto_centavos = "CERO CENTAVOS"
+    elif centavos == 1:
+        texto_centavos = "UN CENTAVO"
+    else:
+        letras_decimal = num2words(centavos, lang='es').upper()
+        if letras_decimal.endswith("UNO"):
+            letras_decimal = letras_decimal[:-1]
+        texto_centavos = f"{letras_decimal} CENTAVOS"
+        
+    return f"{texto_dolares} CON {texto_centavos}"

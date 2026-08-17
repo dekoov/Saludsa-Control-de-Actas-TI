@@ -1,25 +1,11 @@
 // api.js
-
-const BASE_URL =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
-  "http://localhost:5000";
-
-const MOCK_USERS = [
-  {
-    full_name: "CORREA BELTRAN DAVID LEANDRO",
-    username: "dcorrea",
-    national_id: "1726354471",
-    city: "UIO",
-    position: "PASANTE",
-    department: "TI",
-  }
-];
+import { API_BASE_URL } from "@/config/api";
 
 export async function searchADUsers(query) {
   if (!query || query.trim().length < 2) return [];
   try {
     const res = await fetch(
-      `${BASE_URL}/api/ad/users?q=${encodeURIComponent(query)}`,
+      `${API_BASE_URL}/api/ad/users?q=${encodeURIComponent(query)}`,
       {
         method: "GET",
         headers: { Accept: "application/json" },
@@ -55,7 +41,7 @@ export function adUserToUsuario(u) {
 }
 
 export async function generateDiscount(payload) {
-  const res = await fetch(`${BASE_URL}/api/discounts/generate`, {
+  const res = await fetch(`${API_BASE_URL}/api/discounts/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -91,7 +77,7 @@ export async function generateDiscount(payload) {
 }
 
 export async function generateActa(payload) {
-  const res = await fetch(`${BASE_URL}/api/actas/generate`, {
+  const res = await fetch(`${API_BASE_URL}/api/actas/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -138,7 +124,7 @@ export async function generateActa(payload) {
 
 // GET /api/dashboard/stats
 export async function getDashboardStats() {
-  const res = await fetch(`${BASE_URL}/api/dashboard/stats`, { credentials: "include" }); // <-- CORRECCIÓN
+  const res = await fetch(`${API_BASE_URL}/api/dashboard/stats`, { credentials: "include" }); // <-- CORRECCIÓN
   if (!res.ok) throw new Error(`Stats fetch failed: ${res.status}`);
   const payload = await res.json();
   return payload.data;
@@ -146,7 +132,7 @@ export async function getDashboardStats() {
 
 // GET /api/dashboard/recent-users
 export async function getRecentUsers() {
-  const res = await fetch(`${BASE_URL}/api/dashboard/recent-users`, { credentials: "include" }); // <-- CORRECCIÓN
+  const res = await fetch(`${API_BASE_URL}/api/dashboard/recent-users`, { credentials: "include" }); // <-- CORRECCIÓN
   if (!res.ok) throw new Error(`Recent users fetch failed: ${res.status}`);
   const payload = await res.json();
   return payload.data;
@@ -194,7 +180,7 @@ export async function getHistorial({ page = 1, perPage = 20, query = "", activeT
     if (filtros.fecha_desde) params.append("fecha_desde", filtros.fecha_desde);
     if (filtros.fecha_hasta) params.append("fecha_hasta", filtros.fecha_hasta);
 
-    const res = await fetch(`${BASE_URL}/api/actas/historial?${params.toString()}`, {
+    const res = await fetch(`${API_BASE_URL}/api/actas/historial?${params.toString()}`, {
       credentials: "include"
     });
 
@@ -215,7 +201,7 @@ export async function getHistorial({ page = 1, perPage = 20, query = "", activeT
 
 // POST /api/drafts
 export async function saveDraft(payload) {
-  const res = await fetch(`${BASE_URL}/api/drafts`, {
+  const res = await fetch(`${API_BASE_URL}/api/drafts`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -227,21 +213,21 @@ export async function saveDraft(payload) {
 
 // GET /api/drafts
 export async function getDrafts() {
-  const res = await fetch(`${BASE_URL}/api/drafts`, { credentials: "include" }); // <-- CORRECCIÓN
+  const res = await fetch(`${API_BASE_URL}/api/drafts`, { credentials: "include" }); // <-- CORRECCIÓN
   if (!res.ok) throw new Error(`Get drafts failed: ${res.status}`);
   return res.json();
 }
 
 // GET /api/drafts/<id>
 export async function getDraft(id) {
-  const res = await fetch(`${BASE_URL}/api/drafts/${id}`, { credentials: "include" }); // <-- CORRECCIÓN
+  const res = await fetch(`${API_BASE_URL}/api/drafts/${id}`, { credentials: "include" }); // <-- CORRECCIÓN
   if (!res.ok) throw new Error(`Get draft failed: ${res.status}`);
   return res.json();
 }
 
 // DELETE /api/drafts/<id>
 export async function deleteDraft(id) {
-  const res = await fetch(`${BASE_URL}/api/drafts/${id}`, {
+  const res = await fetch(`${API_BASE_URL}/api/drafts/${id}`, {
     method: "DELETE",
     credentials: "include", // <-- CORRECCIÓN
   });
@@ -257,7 +243,7 @@ export async function deleteDraft(id) {
  */
 export async function downloadActaDocumentPDF(actaId, docType) {
   try {
-    const res = await fetch(`${BASE_URL}/api/actas/${actaId}/documents/${docType}/pdf`, {
+    const res = await fetch(`${API_BASE_URL}/api/actas/${actaId}/documents/${docType}/pdf`, {
       method: "GET",
       credentials: "include"
     });
@@ -278,7 +264,7 @@ export async function downloadActaDocumentPDF(actaId, docType) {
 
 // 2. PATCH /api/actas/:id/firmar
 export async function marcarActaComoFirmada(actaId) {
-  const res = await fetch(`${BASE_URL}/api/actas/${actaId}/firmar`, {
+  const res = await fetch(`${API_BASE_URL}/api/actas/${actaId}/firmar`, {
     method: "PATCH",
     credentials: "include"
   });
@@ -288,7 +274,7 @@ export async function marcarActaComoFirmada(actaId) {
 
 // 3. POST /api/actas/:id/sync
 export async function reintentarSyncActa(actaId) {
-  const res = await fetch(`${BASE_URL}/api/actas/${actaId}/sync`, {
+  const res = await fetch(`${API_BASE_URL}/api/actas/${actaId}/sync`, {
     method: "POST",
     credentials: "include"
   });
@@ -298,7 +284,7 @@ export async function reintentarSyncActa(actaId) {
 
 // 4. PATCH /api/actas/:id/anular
 export async function anularActa(actaId) {
-  const res = await fetch(`${BASE_URL}/api/actas/${actaId}/anular`, {
+  const res = await fetch(`${API_BASE_URL}/api/actas/${actaId}/anular`, {
     method: "PATCH",
     credentials: "include"
   });
@@ -311,7 +297,7 @@ export async function anularActa(actaId) {
 
 // PUT /api/drafts/<id>
 export async function updateDraft(id, payload) {
-  const res = await fetch(`${BASE_URL}/api/drafts/${id}`, {
+  const res = await fetch(`${API_BASE_URL}/api/drafts/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

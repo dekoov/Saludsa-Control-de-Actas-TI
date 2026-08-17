@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchConAuth } from "@/lib/fetchConAuth";
-
-const BASE_URL =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
-  "http://localhost:5000";
+import { API_BASE_URL } from "@/config/api";
 
 const POLL_NORMAL_MS = 5 * 60 * 1000;   // Cada 5 minutos en reposo
 const POLL_APPLYING_MS = 1000;          // Cada segundo mientras se actualiza
@@ -37,7 +34,7 @@ export function useUpdateCheck() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const response = await fetchConAuth(`${BASE_URL}/api/system/version`);
+      const response = await fetchConAuth(`${API_BASE_URL}/api/system/version`);
       if (!response.ok) return;
       const result = await response.json();
       const d = result.data || {};
@@ -91,7 +88,7 @@ export function useUpdateCheck() {
   const applyUpdate = useCallback(async () => {
     setState((s) => ({ ...s, applying: true, error: null, stage: "downloading" }));
     try {
-      const response = await fetchConAuth(`${BASE_URL}/api/system/update/apply`, {
+      const response = await fetchConAuth(`${API_BASE_URL}/api/system/update/apply`, {
         method: "POST",
       });
       const result = await response.json();

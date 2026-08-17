@@ -28,9 +28,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 print(f"Validando variables cargadas desde: {env_path}")
-# Forzamos un print directo a la terminal para verificar visualmente que no está vacío
-print(f"   [LDAP SERVER]: {config.LDAP_SERVER}")
-print(f"   [BOT USER]: {config.SALUDSA_USERNAME}")
+logger.info("Variables de entorno cargadas; inicio de aplicación SaludsaActas")
 
 # =======================================
 # 2. DEFINIR LA APLICACIÓN FLASK (Global)
@@ -82,10 +80,18 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
 )
 
+# CORS restringido exclusivamente a orígenes loopback.
+# El frontend en producción se sirve como static files desde Flask, por lo que
+# normalmente no hay peticiones cross-origin. Estos orígenes cubren desarrollo.
 CORS(
     app,
     supports_credentials=True,
-    origins=["http://localhost:5173", "http://localhost:5000"],
+    origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5000",
+        "http://127.0.0.1:5000",
+    ],
 )
 
 init_db(app)
@@ -158,11 +164,13 @@ if __name__ == "__main__":
     # Si es local, respetamos la variable de tu config / .env
     modo_debug = False if es_produccion else config.FLASK_DEBUG
 
+    _LOCALHOST_ONLY_HOST = "127.0.0.1"
+
     print("=========================================")
     print(
         f"Iniciando servidor: {'MODO PRODUCCIÓN (.exe)' if es_produccion else 'MODO DESARROLLO (Local)'}"
     )
-    print(f"Puerto: {config.PORT}")
+    print(f"Binding: {_LOCALHOST_ONLY_HOST}:{config.PORT} (solo loopback)")
     print(f"Debug activo: {modo_debug}")
     print("=========================================")
 
@@ -171,9 +179,9 @@ if __name__ == "__main__":
         from waitress import serve
 
         logger.info(
-            f"Levantando servidor WSGI de producción en http://127.0.0.1:{config.PORT}"
+            f"Levantando servidor WSGI de producción en http://{_LOCALHOST_ONLY_HOST}:{config.PORT}"
         )
-        serve(app, host="127.0.0.1", port=config.PORT)
+        serve(app, host=_LOCALHOST_ONLY_HOST, port=config.PORT)
     else:
-        # 🛠️ Servidor de desarrollo clásico
-        app.run(debug=modo_debug, port=config.PORT, host="127.0.0.1")
+        # 🛠️ Servidor de desarrollo clásico — SIEMPRE loopback
+        app.run(debug=modo_debug, port=config.PORT, host=_LOCALHOST_ONLY_HOST)

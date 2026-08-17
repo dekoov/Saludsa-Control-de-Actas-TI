@@ -115,10 +115,12 @@ def connect_db():
 from src.config import config
 
 # Usar para configurar Flask
+# SaludsaActas SIEMPRE corre en loopback (127.0.0.1).
+# Nunca usar 0.0.0.0; la app no debe ser alcanzable desde otros equipos.
 app.run(
     debug=config.FLASK_DEBUG,
     port=config.PORT,
-    host='0.0.0.0' if config.is_production() else '127.0.0.1'
+    host='127.0.0.1'
 )
 ```
 

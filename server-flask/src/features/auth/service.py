@@ -20,23 +20,8 @@ def validar_credenciales(username, password) -> dict | None:
     """
     if not username or not password:
         return None
-        
-    username = username.strip().lower()
 
-    if username == "admin" and password == "admin123":
-        logger.info("Inicio de sesión simulado con usuario de testing (Bypass LDAP)")
-        return {
-            'first_names': "Usuario",
-            'last_names': "Testing",
-            'display_name': "Usuario de Pruebas",
-            'full_name': "Usuario de Pruebas TI",
-            'username': "admin_test",
-            'national_id': "9999999999",
-            'department': "Tecnología",
-            'position': "Desarrollador / Tester",
-            'email': "tester@local.dev",
-            'city': "Guayaquil"
-        }
+    username = username.strip().lower()
 
     logger.info(f"Intentando auth para: {username} | Servidor Configurado: {config.LDAP_SERVER}")
     upn = obtener_upn_dinamico(username)

@@ -1,9 +1,20 @@
+"""Orquestador del flujo completo de generación de actas.
+
+Este módulo coordina las distintas etapas del proceso de entrega de equipos:
+validación del payload, recuperación de borradores, generación de documentos,
+sincronización con el portal de Saludsa mediante un bot de automatización,
+persistencia en base de datos, envío de correos electrónicos y eliminación del
+borrador asociado. Centraliza la lógica de alto nivel que de otra forma quedaría
+dispersa entre routers, servicios y capas de persistencia.
+"""
+
 import base64
 import logging
 from typing import Any
 
 from flask import session
 from sqlalchemy.exc import SQLAlchemyError
+
 from src.config.config import config
 from src.core.exceptions import DatabaseError, ExternalServiceError, ValidationError
 from src.features.actas.persistence import save_acta_to_database
@@ -19,16 +30,61 @@ logger = logging.getLogger(__name__)
 
 
 class ActaOrchestrator:
-    """
-    Director del flujo de Actas. Coordina la validación, generación de documentos,
-    sincronización con sistemas externos (Bot) y la persistencia.
+    """Director del flujo de Actas.
+
+    Coordina la validación, generación de documentos, sincronización con
+    sistemas externos (bot de Saludsa) y la persistencia del acta. Recibe un
+    servicio de documentos inyectado en su constructor para mantener el acoplamiento
+    bajo y facilitar pruebas unitarias.
+
+    Attributes:
+        doc_service: Instancia de ActaDocumentService encargada de generar los
+            documentos DOCX/PDF del acta y pagaré.
     """
 
-    def __init__(self, doc_service: ActaDocumentService):
+    def __init__(self, doc_service: ActaDocumentService) -> None:
+        """Inicializa el orquestador con el servicio de documentos.
+
+        Args:
+            doc_service: Servicio de dominio que genera documentos físicos/virtuales.
+        """
         self.doc_service = doc_service
 
     def execute(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Ejecuta el flujo completo de creación de un acta.
 
+        El proceso incluye:
+        1. Resolución del payload efectivo (directo o desde borrador).
+        2. Validación y limpieza del payload mediante schemas.
+        3. Generación de documentos (acta y pagaré si aplica).
+        4. Sincronización opcional con el portal de Saludsa mediante bot.
+        5. Persistencia del acta, activos, accesorios y empleado en base de datos.
+        6. Eliminación del borrador si fue usado.
+        7. Envío de correo electrónico al empleado/CC manager si fue solicitado.
+
+        Args:
+            payload: Diccionario con la información del acta. Puede contener los
+                campos directos (usuario, equipos, marcar_firmada, syncHrPortal,
+                sendEmail, emailType) o una referencia draft_id para cargar un
+                borrador existente.
+
+        Returns:
+            dict[str, Any]: Diccionario con el resultado del procesamiento:
+                - acta_id (str): Identificador generado para el acta.
+                - estado (str): Estado final del acta (FIRMADA o PENDIENTE_FIRMA).
+                - usuario (dict): Datos del usuario/empleado normalizados.
+                - fecha (str | None): Timestamp del primer documento generado.
+                - tiene_pagare (bool): Indica si el acta incluye pagaré por laptop.
+                - documents (list[dict]): Lista de documentos en formato base64.
+                - sincronizacion (dict | None): Resultado de la sincronización.
+                - email_enviado (bool): Indica si se envió correo al empleado.
+
+        Raises:
+            ValidationError: Si el payload es inválido o no se encuentra el borrador.
+            ExternalServiceError: Si falla la generación de documentos, faltan
+                credenciales de Saludsa o falla la sincronización de forma crítica.
+            DatabaseError: Si ocurre un error de base de datos al guardar el acta.
+        """
         draft_id = payload.get("draft_id")
         if draft_id:
             draft = get_draft_by_id(draft_id)
@@ -67,7 +123,7 @@ class ActaOrchestrator:
         )
 
         # PASO 3: Sincronización con el Bot de Saludsa
-        sync_result_dict = None
+        sync_result_dict: dict[str, Any] | None = None
         if sync_request:
             if not config.SALUDSA_USERNAME or not config.SALUDSA_PASSWORD:
                 raise ExternalServiceError(
@@ -126,7 +182,7 @@ class ActaOrchestrator:
         if draft_id:
             delete_draft(draft_id)
 
-        formatted_docs = []
+        formatted_docs: list[dict[str, Any]] = []
         for doc in docs:
             pdf_base64 = base64.b64encode(doc["pdf_buffer"].getvalue()).decode("utf-8")
             formatted_docs.append(
@@ -142,7 +198,7 @@ class ActaOrchestrator:
         debe_enviar_email = data_to_process.get(
             "sendEmail", payload.get("sendEmail", False)
         )
-        manager_email = None
+        manager_email: str | None = None
         manager_dn = user_data.get("manager")
         if not manager_dn:
             logger.warning(

@@ -1,3 +1,11 @@
+"""Esquemas y validaciones para el payload de creación de actas.
+
+Este módulo centraliza las reglas de validación del JSON recibido al generar un
+acta: datos mínimos del usuario, campos obligatorios de cada equipo, cantidades
+y costos positivos, y validaciones específicas según el tipo de equipo (laptop,
+cargador, diadema, mochila).
+"""
+
 from typing import Any
 
 from src.core.exceptions import ValidationError
@@ -5,7 +13,23 @@ from src.models.enums import EquipmentType
 
 
 def validate_acta_payload(data: dict[str, Any]) -> dict[str, Any]:
-    """Valida que el payload para crear un acta tenga la estructura correcta."""
+    """Valida que el payload para crear un acta tenga la estructura correcta.
+
+    Revisa que existan los bloques usuario y equipos, que cada equipo contenga
+    los campos obligatorios, que cantidades y costos sean positivos, y aplica
+    reglas específicas según el tipo de equipo.
+
+    Args:
+        data: Payload JSON recibido desde el cliente.
+
+    Returns:
+        dict[str, Any]: El mismo payload validado (posiblemente con campos
+        normalizados como serial_number "NA" para accesorios).
+
+    Raises:
+        ValidationError: Si falta algún campo obligatorio, los tipos son
+            incorrectos o no se cumplen las reglas por tipo de equipo.
+    """
     usuario = data.get("usuario")
     equipos = data.get("equipos")
 
@@ -44,7 +68,7 @@ def validate_acta_payload(data: dict[str, Any]) -> dict[str, Any]:
                 f"El costo de compra debe ser un número positivo para el equipo #{i + 1}."
             )
 
-        # 2. .Validaciones de categorias
+        # 2. Validaciones de categorias
         type = eq["equipment_type"]
         if type == EquipmentType.LAPTOP.value:
             if not eq["serial_number"] or eq["serial_number"].strip() == "":

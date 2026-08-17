@@ -1,11 +1,8 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { fetchConAuth } from "@/lib/fetchConAuth";
+import { API_BASE_URL } from "@/config/api";
 
 const AuthContext = createContext(null);
-
-const BASE_URL =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
-  "http://localhost:5000";
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -16,7 +13,7 @@ export const AuthProvider = ({ children }) => {
   const checkAuthStatus = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await fetchConAuth(`${BASE_URL}/api/auth/estado`);
+      const response = await fetchConAuth(`${API_BASE_URL}/api/auth/estado`);
       const result = await response.json();
 
       if (result.status && result.data?.autenticado) {
@@ -51,7 +48,7 @@ export const AuthProvider = ({ children }) => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetchConAuth(`${BASE_URL}/api/auth/login`, {
+      const response = await fetchConAuth(`${API_BASE_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -79,7 +76,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await fetchConAuth(`${BASE_URL}/api/auth/logout`, { method: "POST" });
+      await fetchConAuth(`${API_BASE_URL}/api/auth/logout`, { method: "POST" });
     } catch (err) {
       console.error("[AuthContext] Error al cerrar sesión:", err);
     } finally {

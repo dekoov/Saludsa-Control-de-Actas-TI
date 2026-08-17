@@ -39,11 +39,6 @@ class Config:
     SALUDSA_PASSWORD: str = os.getenv("SALUDSA_PASSWORD", "")
     SALUDSA_INTERNAL_IP: str = os.getenv("SALUDSA_INTERNAL_IP", "")
 
-    # === Testing & Bypass Configuration ===
-    ALLOW_AUTH_BYPASS: bool = os.getenv("ALLOW_AUTH_BYPASS", "False").lower() == "true"
-    TEST_AUTH_USER: str = os.getenv("TEST_AUTH_USER", "admin")
-    TEST_AUTH_PASS: str = os.getenv("TEST_AUTH_PASS", "admin123")
-
     # === Email / SMTP Configuration ===
     SMTP_SERVER: str = os.getenv("SMTP_SERVER", "smtp.office365.com")
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
@@ -76,7 +71,15 @@ class Config:
 
     # === API Configuration ===
     API_PREFIX: str = os.getenv("API_PREFIX", "/api")
-    CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "*")
+    # CORS restringido a loopback. main.py ya hardcodea estos orígenes;
+    # este default evita que una variable mal configurada abra la app a '*'
+    _cors_origins_raw: str = os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5000,http://127.0.0.1:5000",
+    )
+    CORS_ORIGINS: list[str] = [
+        o.strip() for o in _cors_origins_raw.split(",") if o.strip()
+    ]
 
     @classmethod
     def is_production(cls) -> bool:

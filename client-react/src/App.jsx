@@ -15,14 +15,6 @@ function App() {
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [items, setItems] = useState([]);
 
-  // Cargar usuarios de la API
-  useEffect(() => {
-    fetch('http://localhost:5000/api/user')
-      .then((res) => res.json())
-      .then((data) => setUsers(data.users || []))
-      .catch((error) => console.error('Error cargando usuarios:', error))
-  }, []);
-
   // Filtrar usuarios según búsqueda
   useEffect(() => {
     if (searchQuery.trim()) {

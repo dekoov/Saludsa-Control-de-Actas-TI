@@ -11,12 +11,19 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // El frontend de SaludsaActas solo debe ser accesible desde loopback.
   server: {
+    host: "127.0.0.1",
+    port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'http://127.0.0.1:5000',
         changeOrigin: true,
       }
     }
+  },
+  preview: {
+    host: "127.0.0.1",
+    port: 5173,
   }
 })

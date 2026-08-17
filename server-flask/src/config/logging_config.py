@@ -1,13 +1,33 @@
+"""Configuración centralizada del sistema de logging.
+
+Este módulo inicializa los handlers de archivo rotativo y consola para el
+logger raíz, ajusta el nivel de verbosidad de librerías externas como
+Playwright y SQLAlchemy, y opcionalmente configura el logger propio de la
+aplicación Flask.
+"""
+
 import logging
 import os
 from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 
+from flask import Flask
 
-def setup_logging(app=None):
-    """
-    Configura el logging para la aplicación Flask.
-    Si se proporciona app, configura el logger de Flask.
+
+def setup_logging(app: Flask | None = None) -> None:
+    """Configura el sistema de logging para la aplicación.
+
+    Crea el directorio ``logs`` si no existe, configura un handler de archivo
+    rotatorio de hasta 10 MB con 10 copias de respaldo, y un handler de consola.
+    Si se proporciona una instancia de Flask, también se añaden los handlers al
+    logger de la aplicación.
+
+    Args:
+        app: Instancia opcional de la aplicación Flask cuyo logger se desea
+            configurar.
+
+    Returns:
+        None. Este método no retorna valor.
     """
     # Crear directorio de logs si no existe
     log_dir = "logs"

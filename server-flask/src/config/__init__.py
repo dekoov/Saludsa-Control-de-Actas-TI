@@ -1,3 +1,10 @@
+"""Paquete ``config`` del backend.
+
+Exporta los componentes de configuración centralizada del proyecto,
+incluyendo la instancia global de configuración, utilidades de logging,
+resolución de rutas y verificación de Playwright.
+"""
+
 from .config import config
 from .deploy_config import resolve_route
 from .logging_config import setup_logging

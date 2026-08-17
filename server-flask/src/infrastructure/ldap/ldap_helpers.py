@@ -1,3 +1,8 @@
+"""Helpers para cálculo de UPN y saneamiento de credenciales LDAP.
+
+Funciones de utilidad que transforman un ``sAMAccountName`` en un UPN completo
+usando el dominio derivado del ``LDAP_BASE_DN`` configurado.
+"""
 import logging
 import re
 
@@ -8,13 +13,22 @@ logger = logging.getLogger(__name__)
 
 
 def obtener_upn_dinamico(username: str) -> str:
-    """
-    Toma un sAMAccountName y calcula su UPN dinámicamente
-    extrayendo las particiones DC del LDAP_BASE_DN.
+    """Calcula el UPN dinámico de un usuario a partir de su ``sAMAccountName``.
+
+    Extrae las particiones ``DC`` del ``LDAP_BASE_DN`` configurado para formar
+    el dominio y sanitiza el username antes de componer ``username@dominio``.
+
+    Args:
+        username: ``sAMAccountName`` del técnico/usuario.
+
+    Returns:
+        str: UPN completo en formato ``username@dominio.ldap``.
 
     Raises:
-        ValidationError: Si el username está vacío o es inválido.
-        ExternalServiceError: Si LDAP_BASE_DN no está configurado o está malformado.
+        ValidationError: Si el username está vacío o queda vacío después de
+            saneamiento.
+        ExternalServiceError: Si ``LDAP_BASE_DN`` no está configurado o está
+            malformado.
     """
     if not username or not isinstance(username, str):
         raise ValidationError(

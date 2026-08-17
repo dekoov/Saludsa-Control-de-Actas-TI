@@ -1,3 +1,11 @@
+"""Configuración y verificación del entorno de Playwright.
+
+Este módulo gestiona la ubicación de los navegadores de Playwright,
+garantizando que Chromium esté disponible tanto en desarrollo como en
+aplicaciones empaquetadas con PyInstaller, donde se utiliza un directorio
+persistente dentro de ``LOCALAPPDATA``.
+"""
+
 import logging
 import os
 import sys
@@ -6,20 +14,31 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 APP_NAME = "SaludsaActas"
+"""str: Nombre de la aplicación usado para crear el directorio de navegadores."""
+
 BROWSERS_DIR_NAME = "playwright-browsers"
+"""str: Nombre del subdirectorio donde se almacenan los navegadores."""
 
 
 def _is_frozen() -> bool:
-    """Indica si la aplicación está ejecutándose como bundle PyInstaller."""
+    """Indica si la aplicación está ejecutándose como bundle PyInstaller.
+
+    Returns:
+        ``True`` si el atributo ``sys.frozen`` está presente; de lo contrario,
+        ``False``.
+    """
     return bool(getattr(sys, "frozen", False))
 
 
 def _get_browsers_path() -> Path:
-    """
-    Obtiene directorio persistente donde Playwright almacenará navegadores.
+    """Obtiene el directorio persistente donde Playwright almacenará navegadores.
+
+    Returns:
+        Ruta absoluta del directorio de navegadores dentro de ``LOCALAPPDATA``.
 
     Raises:
-        RuntimeError: Si LOCALAPPDATA no está disponible.
+        RuntimeError: Si la variable de entorno ``LOCALAPPDATA`` no está
+            disponible.
     """
     local_app_data = os.environ.get("LOCALAPPDATA")
 
@@ -33,7 +52,15 @@ def _get_browsers_path() -> Path:
 
 
 def _chromium_installed(browsers_path: Path) -> bool:
-    """Comprueba si existe una instalación de Chromium de Playwright."""
+    """Comprueba si existe una instalación de Chromium de Playwright.
+
+    Args:
+        browsers_path: Directorio donde se buscan los navegadores instalados.
+
+    Returns:
+        ``True`` si existe al menos un subdirectorio cuyo nombre comience con
+        ``'chromium-'``; de lo contrario, ``False``.
+    """
     if not browsers_path.is_dir():
         return False
 
@@ -44,7 +71,14 @@ def _chromium_installed(browsers_path: Path) -> bool:
 
 
 def _install_chromium() -> None:
-    """Instala Chromium mediante Playwright."""
+    """Instala Chromium mediante el CLI de Playwright.
+
+    Temporalmente reemplaza ``sys.argv`` para invocar el comando
+    ``playwright install chromium`` y restaura el valor original al finalizar.
+
+    Returns:
+        None. Este método no retorna valor.
+    """
     from playwright.__main__ import main as playwright_main
 
     original_argv = sys.argv.copy()
@@ -63,11 +97,20 @@ def _install_chromium() -> None:
 
 
 def check_playwright() -> None:
-    """
-    Configura Playwright y garantiza navegador disponible.
+    """Configura Playwright y garantiza que el navegador esté disponible.
 
-    En desarrollo utiliza configuración normal de Playwright.
-    En PyInstaller utiliza directorio persistente dentro de LOCALAPPDATA.
+    En desarrollo utiliza la configuración normal de Playwright, eliminando
+    cualquier valor previo de ``PLAYWRIGHT_BROWSERS_PATH``. En aplicaciones
+    empaquetadas con PyInstaller, apunta el entorno a un directorio persistente
+    dentro de ``LOCALAPPDATA`` e instala Chromium si no está presente.
+
+    Returns:
+        None. Este método no retorna valor.
+
+    Raises:
+        RuntimeError: Si no se puede determinar la ubicación de navegadores,
+            falla la instalación de Chromium o este no queda disponible tras
+            intentar instalarlo.
     """
     if not _is_frozen():
         os.environ.pop("PLAYWRIGHT_BROWSERS_PATH", None)

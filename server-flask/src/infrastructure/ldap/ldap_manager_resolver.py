@@ -1,3 +1,10 @@
+"""Resolución de correos electrónicos de jefes inmediatos vía LDAP.
+
+Dado el DN del manager de un usuario, busca la entrada en Active Directory y
+resuelve su dirección de correo preferentemente del atributo ``mail``; como
+fallback construye un email a partir del ``sAMAccountName`` y el dominio
+corporativo configurado.
+"""
 import logging
 import re
 
@@ -12,9 +19,15 @@ logger = logging.getLogger(__name__)
 
 
 def extract_cn_from_dn(manager_dn: str) -> str | None:
-    """
-    Extrae el Common Name (CN) de un Distinguished Name (DN).
-    Ej: 'CN=CHOEZ PIGUAVE RONNY LUIS,OU=...' -> 'CHOEZ PIGUAVE RONNY LUIS'
+    """Extrae el Common Name (CN) de un Distinguished Name (DN).
+
+    Args:
+        manager_dn: Cadena con el DN completo del manager. Por ejemplo
+            ``CN=CHOEZ PIGUAVE RONNY LUIS,OU=Usuarios,DC=...``.
+
+    Returns:
+        str | None: El valor del CN limpio, o ``None`` si el DN es inválido o
+        está vacío.
     """
     if not manager_dn or not isinstance(manager_dn, str):
         return None
@@ -28,12 +41,19 @@ def extract_cn_from_dn(manager_dn: str) -> str | None:
 
 
 def resolve_manager_email(manager_dn: str | None) -> str | None:
-    """
-    Resuelve el correo del jefe inmediato a partir de su DN en Active Directory.
+    """Resuelve el correo del jefe inmediato a partir de su DN.
 
-    - Retorna el email si lo encuentra.
-    - Retorna None si no hay manager, no se encuentra o no tiene email.
-    - Propaga ExternalServiceError si hay un fallo real de conexión/servicio LDAP.
+    Args:
+        manager_dn: DN del manager en Active Directory, o ``None``.
+
+    Returns:
+        str | None: Email normalizado en minúsculas si se encuentra; ``None``
+        si no hay manager, no se encuentra la entrada o no tiene email ni
+        ``sAMAccountName``.
+
+    Raises:
+        ExternalServiceError: Si ocurre un fallo real de conexión o consulta
+            LDAP.
     """
     if not manager_dn:
         return None

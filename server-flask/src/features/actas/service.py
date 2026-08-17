@@ -1,3 +1,13 @@
+"""Servicios de dominio para el feature Actas.
+
+Contiene la lógica de negocio relacionada con la generación física de
+documentos (acta y pagaré) y la gestión del historial de actas: consulta,
+formateo, firma, anulación, descarga con auto-curación y sincronización con
+Saludsa. Los servicios no interactúan directamente con el framework Flask; su
+comunicación con la infraestructura se realiza a través de la capa de
+persistencia y utilidades especializadas.
+"""
+
 import io
 import os
 from typing import Any
@@ -13,9 +23,9 @@ from src.features.actas.persistence import (
     update_acta_status,
     update_acta_sync_status,
 )
-from src.models.enums import ActaStatus, EquipmentType
 from src.infrastructure.documents.document_service import convert_to_pdf_buffer
 from src.infrastructure.saludsa_bot.saludsa_bot_service import SaludsaBotService
+from src.models.enums import ActaStatus, EquipmentType
 from src.utils.formatters import (
     fecha_a_texto,
     fecha_a_texto_legal,
@@ -25,17 +35,34 @@ from src.utils.formatters import (
 
 
 class ActaDocumentService:
-    """
-    Servicio de dominio estrictamente dedicado a la generación de documentos físicos/virtuales.
-    No realiza persistencia ni interactúa con APIs externas.
+    """Servicio de dominio dedicado a la generación de documentos físicos/virtuales.
+
+    No realiza persistencia ni interactúa con APIs externas. Se encarga de
+    construir el contexto de renderizado, seleccionar la plantilla adecuada y
+    generar el acta principal y, opcionalmente, el pagaré cuando el equipo
+    principal es una laptop.
+
+    Attributes:
+        None: clase sin estado interno.
     """
 
     def generate_documents(
-        self, user_data: dict[str, Any], equipment_list: list[Any]
-    ) -> list[dict]:
-        """
-        Evalúa la lógica de negocio y genera los documentos correspondientes.
-        Retorna una lista con las rutas de los archivos generados.
+        self, user_data: dict[str, Any], equipment_list: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Genera los documentos DOCX/PDF asociados a un acta.
+
+        Siempre genera el acta principal. Si el primer equipo es una laptop,
+        también genera el pagaré correspondiente con el monto en letras y la
+        fecha legal.
+
+        Args:
+            user_data: Datos del empleado/usuario destinatario.
+            equipment_list: Lista de equipos a incluir en el acta.
+
+        Returns:
+            list[dict[str, Any]]: Lista con uno o dos diccionarios de documentos
+            generados (acta y pagaré). Cada diccionario incluye document_type,
+            file_name, pdf_buffer, docx_path y pdf_base64.
         """
         if not equipment_list:
             return []
@@ -56,7 +83,7 @@ class ActaDocumentService:
             "actual_date": fecha_a_texto(),
         }
 
-        processed_documents = []
+        processed_documents: list[dict[str, Any]] = []
 
         # 2. Generar el Acta Principal (siempre se genera)
         acta_name = f"ENTREGA_{user_data.get('username')}_{eq_type}_{eq_serial}.docx"
@@ -101,11 +128,26 @@ class ActaDocumentService:
 
 
 class ActaHistoryService:
-    """
-    Servicio dedicado a la recuperación y formateo del historial de actas.
+    """Servicio dedicado a la recuperación y gestión del historial de actas.
+
+    Expone operaciones de lectura, firma, anulación, descarga de documentos y
+    sincronización con el portal de Saludsa. Actúa como capa de negocio entre
+    los routers y la capa de persistencia.
+
+    Attributes:
+        None: clase sin estado interno.
     """
 
     def fetch_history(self, filters: dict[str, Any]) -> dict[str, Any]:
+        """Recupera y formatea el historial paginado de actas.
+
+        Args:
+            filters: Diccionario con criterios de búsqueda, filtros y paginación.
+
+        Returns:
+            dict[str, Any]: Diccionario con items formateados y metadatos de
+            paginación (total, page, per_page).
+        """
         # 1. Obtenemos la data cruda paginada desde persistencia
         pagination = get_paginated_actas_history(filters)
 
@@ -123,7 +165,18 @@ class ActaHistoryService:
         }
 
     def anular_acta(self, acta_id: str) -> bool:
-        """Valida las reglas de negocio para la anulación y delega la persistencia."""
+        """Anula un acta validando las reglas de negocio.
+
+        Args:
+            acta_id: Identificador del acta a anular.
+
+        Returns:
+            bool: True si la anulación fue exitosa.
+
+        Raises:
+            NotFoundError: Si el acta no existe.
+            AppError: Si el acta ya está anulada.
+        """
         acta = get_acta_by_id(acta_id)
         if not acta:
             raise NotFoundError(
@@ -137,7 +190,18 @@ class ActaHistoryService:
         return True
 
     def marcar_como_firmada(self, acta_id: str) -> bool:
-        """Valida las reglas de negocio para la firma y delega la persistencia."""
+        """Marca un acta como firmada validando las reglas de negocio.
+
+        Args:
+            acta_id: Identificador del acta a firmar.
+
+        Returns:
+            bool: True si la firma fue exitosa.
+
+        Raises:
+            NotFoundError: Si el acta no existe.
+            AppError: Si el acta ya estaba firmada.
+        """
         acta = get_acta_by_id(acta_id)
         if not acta:
             raise NotFoundError(
@@ -156,12 +220,26 @@ class ActaHistoryService:
     def get_acta_document_stream(
         self, acta_id: str, doc_type: str
     ) -> tuple[io.BytesIO, str]:
-        """
-        Coordina el flujo de descarga de un documento. Si el archivo base no existe,
-        aplica la estrategia de Auto-curación (Self-Healing) regenerándolo desde la data histórica.
+        """Obtiene el stream PDF de un documento del acta.
+
+        Coordina la descarga del acta o pagaré. Si el archivo físico no existe,
+        aplica la estrategia de Auto-curación (Self-Healing) regenerándolo desde
+        la data histórica del acta y actualizando las rutas en base de datos.
+
+        Args:
+            acta_id: Identificador del acta.
+            doc_type: Tipo de documento solicitado ("acta" o "pagare").
 
         Returns:
-            tuple: (pdf_buffer: io.BytesIO, filename: str)
+            tuple[io.BytesIO, str]: Tupla con el buffer PDF y el nombre del
+            archivo resultante.
+
+        Raises:
+            AppError: Si el tipo de documento es inválido, el acta no tiene
+                pagaré, no se pudo regenerar el documento o no se determinó una
+                ruta física válida.
+            NotFoundError: Si el acta no existe.
+            ExternalServiceError: Si falla la conversión a PDF.
         """
         if doc_type not in ["acta", "pagare"]:
             raise AppError(
@@ -192,9 +270,9 @@ class ActaHistoryService:
                 "city": getattr(acta.empleado, "city", "Quito"),
             }
 
-            equipment_list = []
+            equipment_list: list[dict[str, Any]] = []
 
-            # SOLUCCIÓN CRÍTICA 1: Forzar la evaluación de la relación o usar una lista vacía si es None
+            # SOLUCIÓN CRÍTICA 1: Forzar la evaluación de la relación o usar una lista vacía si es None
             activos = getattr(acta, "activos", []) or []
             for activo in activos:
                 equipment_list.append(
@@ -264,9 +342,23 @@ class ActaHistoryService:
                 payload=str(e),
             ) from e
 
-    def ejecutar_sincronizacion_saludsa(self, acta_id: str) -> dict:
-        """
-        Recupera el acta de la DB, inicializa el bot de Playwright y actualiza los estados de sincronización.
+    def ejecutar_sincronizacion_saludsa(self, acta_id: str) -> dict[str, Any]:
+        """Reintenta la sincronización de un acta con el portal de Saludsa.
+
+        Recupera el acta de la base de datos, reconstruye los payloads de
+        empleado y equipos, inicializa el bot de Playwright y actualiza los
+        estados de sincronización según el resultado.
+
+        Args:
+            acta_id: Identificador del acta a sincronizar.
+
+        Returns:
+            dict[str, Any]: Diccionario con mensaje y ruta del screenshot:
+                {"mensaje": str, "screenshot": str | None}.
+
+        Raises:
+            NotFoundError: Si el acta no existe.
+            ExternalServiceError: Si la sincronización falla.
         """
         # 1. Buscar el registro real usando tu función de persistencia aislada
         acta = get_acta_by_id(acta_id)
@@ -285,7 +377,7 @@ class ActaHistoryService:
         }
 
         # 3. Mapear Activos y Accesorios de las relaciones reales a la lista plana del Bot
-        equipos_payload = []
+        equipos_payload: list[dict[str, Any]] = []
 
         # Procesar Laptops (Activos principales)
         activos = getattr(acta, "activos", []) or []

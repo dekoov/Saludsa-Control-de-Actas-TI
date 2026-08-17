@@ -1,6 +1,13 @@
+"""Servicio de datos del dashboard.
+
+Calcula estadísticas agregadas sobre actas y borradores, y recupera los
+empleados más recientes que tienen actas generadas en el sistema.
+"""
+
 from typing import Any
 
 from sqlalchemy import desc, func
+
 from src.infrastructure.persistence.db import db
 from src.models.acta import Acta, ActaDraft
 from src.models.employee import Empleado
@@ -8,19 +15,23 @@ from src.models.enums import ActaStatus
 
 
 def get_dashboard_stats() -> dict[str, int]:
-    """
-    Retorna estadísticas para el dashboard.
-    - total_actas: total de actas en el sistema
-    - pendientes_firma: actas con estado 'Pendiente Firma'
-    - borradores: actas con estado 'Borrador'
-    - pendientes_saludsa: actas firmadas pero no sincronizadas con Saludsa
+    """Retorna estadísticas resumidas para el dashboard.
+
+    Calcula:
+        - total_actas: total de actas en el sistema.
+        - pendientes_firma: actas con estado Pendiente Firma.
+        - borradores: total de borradores almacenados.
+        - pendientes_saludsa: actas aún no sincronizadas con Saludsa.
+
+    Returns:
+        dict[str, int]: Diccionario con los contadores descritos.
     """
     total_actas = Acta.query.count()
-    
+
     pendientes_firma = Acta.query.filter_by(
         estado=ActaStatus.PENDIENTE_FIRMA
     ).count()
-    
+
     borradores = ActaDraft.query.count()
 
     pendientes_saludsa = Acta.query.filter(
@@ -31,38 +42,47 @@ def get_dashboard_stats() -> dict[str, int]:
         "total_actas": total_actas,
         "pendientes_firma": pendientes_firma,
         "borradores": borradores,
-        "pendientes_saludsa": pendientes_saludsa
+        "pendientes_saludsa": pendientes_saludsa,
     }
 
 
 def get_recent_users() -> list[dict[str, Any]]:
-    """
-    Retorna los últimos 5 empleados con acta generada, sin duplicados,
-    ordenados por la fecha de su acta más reciente.
+    """Retorna los últimos empleados con acta generada.
+
+    Obtiene hasta 5 empleados distintos ordenados por la fecha de su acta más
+    reciente, evitando duplicados mediante una subconsulta de agregación.
+
+    Returns:
+        list[dict[str, Any]]: Lista de diccionarios con username, full_name,
+        city y fecha_ultima_acta en formato ISO.
     """
     # Subquery para obtener la fecha más reciente de acta por empleado
-    subquery = db.session.query(
-        Acta.empleado_id,
-        func.max(Acta.fecha).label('max_fecha')
-    ).group_by(Acta.empleado_id).subquery()
-    
+    subquery = (
+        db.session.query(
+            Acta.empleado_id, func.max(Acta.fecha).label("max_fecha")
+        )
+        .group_by(Acta.empleado_id)
+        .subquery()
+    )
+
     # Query principal para obtener los empleados con sus fechas
-    recent_employees = db.session.query(
-        Empleado,
-        subquery.c.max_fecha
-    ).join(
-        subquery, Empleado.id == subquery.c.empleado_id
-    ).order_by(
-        desc(subquery.c.max_fecha)
-    ).limit(5).all()
-    
-    result = []
+    recent_employees = (
+        db.session.query(Empleado, subquery.c.max_fecha)
+        .join(subquery, Empleado.id == subquery.c.empleado_id)
+        .order_by(desc(subquery.c.max_fecha))
+        .limit(5)
+        .all()
+    )
+
+    result: list[dict[str, Any]] = []
     for empleado, fecha in recent_employees:
-        result.append({
-            "username": empleado.username,
-            "full_name": empleado.full_name,
-            "city": empleado.city,
-            "fecha_ultima_acta": fecha.isoformat() if fecha else None
-        })
-    
+        result.append(
+            {
+                "username": empleado.username,
+                "full_name": empleado.full_name,
+                "city": empleado.city,
+                "fecha_ultima_acta": fecha.isoformat() if fecha else None,
+            }
+        )
+
     return result

@@ -1,3 +1,9 @@
+"""Orquestador del icono de bandeja del sistema.
+
+Combina la fábrica de iconos y las acciones del menú para inicializar
+``pystray.Icon`` en un hilo daemon, permitiendo que la aplicación Flask
+continúe ejecutándose en primer plano.
+"""
 import threading
 
 from pystray import Icon, Menu, MenuItem
@@ -13,8 +19,20 @@ from src.infrastructure.tray.menu_actions import (
 )
 
 
-def inicializar_tray(application_path: str):
-    """Configura y lanza el icono en la barra de tareas en un hilo secundario."""
+def inicializar_tray(application_path: str) -> None:
+    """Configura y lanza el icono en la bandeja de tareas en un hilo secundario.
+
+    Args:
+        application_path: Ruta base de la aplicación, usada para cargar el
+            icono y resolver las acciones de menú.
+
+    Returns:
+        None. Este método no retorna valor.
+
+    Side Effects:
+        - Crea una variable global ``icon_global``.
+        - Lanza ``pystray.Icon.run`` en un hilo daemon.
+    """
     imagen_icon = cargar_icono(application_path)
 
     menu_tray = Menu(

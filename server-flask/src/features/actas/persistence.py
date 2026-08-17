@@ -1,7 +1,16 @@
+"""Capa de persistencia para actas generadas.
+
+Este módulo contiene las funciones de acceso a datos para los actas: generación
+secuencial de identificadores, creación del registro principal, actualización de
+estados, rutas de archivos, estado de sincronización y consulta paginada del
+historial aplicando filtros dinámicos.
+"""
+
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import desc, or_
+
 from src.core.exceptions import DatabaseError
 from src.features.employees.persistence import upsert_empleado
 from src.features.equipments.persistence import insert_accesorio, upsert_activo
@@ -14,11 +23,13 @@ from src.utils.parse_datetime import parse_utc_date
 
 
 def _generate_acta_id() -> str:  # ← prefijo _ = internal
-    """
-    Genera un ID de acta secuencial en formato ACT-YYYYMMDD-NNN
+    """Genera un ID de acta secuencial en formato ACT-YYYYMMDD-NNN.
+
+    Busca el último acta creado en la fecha actual, bloquea la fila para evitar
+    duplicados concurrentes e incrementa el contador numérico de tres dígitos.
 
     Returns:
-        str: ID de acta generado (ej: ACT-20250515-001)
+        str: ID generado, por ejemplo ACT-20250515-001.
     """
     prefix = f"ACT-{datetime.now(UTC).strftime('%Y%m%d')}"
     last = (
@@ -38,10 +49,25 @@ def save_acta_to_database(
     estado: ActaStatus | None = None,
     sync_result: dict[str, Any] | None = None,
 ) -> str | None:
-    """
-    Guarda el acta en la base de datos después de la generación de documentos.
-    Retorna el acta ID si exitoso, None si hubo error (no falla el request).
-    Si no se proporciona estado, usa PENDIENTE_FIRMA por defecto.
+    """Persiste un acta completa en la base de datos.
+
+    Realiza el upsert del empleado, separa laptops de accesorios, persiste cada
+    activo/accesorio, crea el registro del acta con sus relaciones y confirma la
+    transacción. Si ocurre cualquier error, realiza rollback y lanza DatabaseError.
+
+    Args:
+        equipos: Lista de equipos (activos y accesorios) asociados al acta.
+        usuario: Datos del empleado/usuario destinatario del acta.
+        generated_docs: Lista de documentos generados por ActaDocumentService.
+        estado: Estado final del acta. Si es None, usa PENDIENTE_FIRMA por defecto.
+        sync_result: Resultado de la sincronización con Saludsa. Si es None se
+            asume sincronización pendiente.
+
+    Returns:
+        str | None: ID del acta persistido o None si no se pudo guardar.
+
+    Raises:
+        DatabaseError: Si ocurre un error durante la transacción.
     """
     try:
         empleado = upsert_empleado(usuario)
@@ -50,12 +76,12 @@ def save_acta_to_database(
         laptops = [eq for eq in equipos if eq.get("equipment_type") == "Laptop"]
         accesorios = [eq for eq in equipos if eq.get("equipment_type") != "Laptop"]
 
-        activos_ids = []
+        activos_ids: list[int] = []
         for laptop in laptops:
             activo = upsert_activo(laptop)
             activos_ids.append(activo.id)
 
-        accesorios_ids = []
+        accesorios_ids: list[int] = []
         for accesorio_data in accesorios:
             accesorio = insert_accesorio(accesorio_data)
             accesorios_ids.append(accesorio.id)
@@ -72,7 +98,7 @@ def save_acta_to_database(
 
         # Handle sync status
         sincronizado_saludsa = False
-        timestamp_sincronizacion = None
+        timestamp_sincronizacion: datetime | None = None
         estado_sincronizacion = SyncStatus.PENDIENTE
 
         if sync_result:
@@ -84,7 +110,7 @@ def save_acta_to_database(
             )
             timestamp_sincronizacion = sync_result.get("timestamp")
 
-        acta = Acta(  
+        acta = Acta(
             id=_generate_acta_id(),
             tipo=ActaType.DOTACION,
             estado=acta_estado,
@@ -122,8 +148,17 @@ def save_acta_to_database(
 
 
 def update_acta_status(acta_id: str, nuevo_estado: str) -> bool:
-    """
-    Modifica el estado de un acta directamente en la base de datos de forma segura.
+    """Actualiza el estado de un acta en la base de datos.
+
+    Args:
+        acta_id: Identificador del acta a actualizar.
+        nuevo_estado: Nuevo estado a asignar (por ejemplo, FIRMADA o ANULADA).
+
+    Returns:
+        bool: True si el acta existió y se actualizó, False si no se encontró.
+
+    Raises:
+        DatabaseError: Si ocurre un error durante la actualización.
     """
     try:
         acta = get_acta_by_id(acta_id)
@@ -141,8 +176,13 @@ def update_acta_status(acta_id: str, nuevo_estado: str) -> bool:
 
 
 def get_acta_by_id(acta_id: str) -> Acta | None:
-    """
-    Busca de forma limpia un acta por su identificador primario.
+    """Obtiene un acta por su identificador primario.
+
+    Args:
+        acta_id: Identificador del acta.
+
+    Returns:
+        Acta | None: Instancia del modelo Acta o None si no existe.
     """
     return Acta.query.get(acta_id)
 
@@ -150,8 +190,18 @@ def get_acta_by_id(acta_id: str) -> Acta | None:
 def update_acta_document_paths(
     acta_id: str, archivo_acta: str, archivo_pagare: str | None = None
 ) -> bool:
-    """
-    Actualiza de forma atómica las rutas de los archivos físicos generados para un acta.
+    """Actualiza las rutas físicas de los documentos generados de un acta.
+
+    Args:
+        acta_id: Identificador del acta.
+        archivo_acta: Nueva ruta del archivo DOCX del acta.
+        archivo_pagare: Nueva ruta del archivo DOCX del pagaré (opcional).
+
+    Returns:
+        bool: True si se actualizó correctamente, False si el acta no existe.
+
+    Raises:
+        DatabaseError: Si ocurre un error durante la actualización.
     """
     try:
         acta = get_acta_by_id(acta_id)
@@ -172,8 +222,21 @@ def update_acta_document_paths(
 
 
 def get_paginated_actas_history(filters: dict[str, Any]):
-    """
-    Construye y ejecuta la consulta de actas en la base de datos aplicando filtros dinámicos.
+    """Consulta paginada del historial de actas aplicando filtros dinámicos.
+
+    Construye una consulta SQLAlchemy con joins a empleados, activos y accesorios,
+    aplica filtros de búsqueda global, estado, tipo, estado de sincronización,
+    pagaré, rango de fechas y paginación segura.
+
+    Args:
+        filters: Diccionario con los criterios de filtrado y paginación. Las
+            claves que acepta son ``q``, ``estado``, ``tipo``, ``sync_status``,
+            ``tiene_pagare``, ``fecha_desde``, ``fecha_hasta``,
+            ``solo_atencion``, ``page`` y ``per_page``.
+
+    Returns:
+        Pagination: Objeto de paginación de SQLAlchemy con los actas ordenados
+        por fecha descendente.
     """
     query = Acta.query
 
@@ -278,8 +341,18 @@ def get_paginated_actas_history(filters: dict[str, Any]):
 def update_acta_sync_status(
     acta_id: str, exitosa: bool, estado_sincronizacion: str
 ) -> bool:
-    """
-    Actualiza de forma segura los campos de sincronización con Saludsa en la base de datos.
+    """Actualiza los campos de sincronización con Saludsa de un acta.
+
+    Args:
+        acta_id: Identificador del acta.
+        exitosa: Indica si la sincronización fue exitosa.
+        estado_sincronizacion: Valor textual del estado (Exitosa, Fallida, Pendiente).
+
+    Returns:
+        bool: True si se actualizó correctamente, False si el acta no existe.
+
+    Raises:
+        DatabaseError: Si ocurre un error durante la actualización.
     """
     try:
         acta = get_acta_by_id(acta_id)

@@ -1,21 +1,20 @@
-"""
-infrastructure/updater/agent_entry.py
+"""Entry point del agente de actualización ``SaludsaUpdaterAgent.exe``.
 
-Entry point de SaludsaUpdaterAgent.exe -- proceso separado en Python puro
-(sin PowerShell) que espera a que la app principal cierre, corre el
-instalador Inno Setup en modo silencioso, y relanza la app actualizada.
+Proceso separado en Python puro (sin PowerShell) que espera a que la
+aplicación principal cierre, ejecuta el instalador Inno Setup en modo
+silencioso y relanza la aplicación actualizada.
 
-Por qué existe: Windows bloquea un .exe/carpeta en uso, así que la propia
-app principal no puede reemplazarse a sí misma. Este agente corre aparte,
-espera el cierre real del proceso principal, y recién ahí dispara el
-instalador. Con PrivilegesRequired=lowest en el instalador, todo esto corre
-sin admin y sin UAC en ningún punto.
+Windows bloquea un ejecutable/carpeta en uso, por lo que la aplicación
+principal no puede reemplazarse a sí misma. Este agente corre aparte, espera
+el cierre real del proceso principal y recién entonces dispara el instalador.
+Con ``PrivilegesRequired=lowest`` en el instalador, todo esto corre sin
+administrador y sin UAC.
 
-Se compila aparte con PyInstaller (--onefile, CON consola -- es el
-placeholder de progreso pedido) y se distribuye junto a SaludsaActas.exe
-dentro del mismo instalador de Inno Setup.
+Se compila aparte con PyInstaller (``--onefile``, CON consola) y se distribuye
+junto a ``SaludsaActas.exe`` dentro del mismo instalador de Inno Setup.
 
-Invocación (desde infrastructure/updater/updater.py):
+Invocación (desde ``infrastructure/updater/updater.py``)::
+
     subprocess.Popen([
         str(agent_path),
         "--pid", str(os.getpid()),
@@ -23,10 +22,10 @@ Invocación (desde infrastructure/updater/updater.py):
         "--app-exe", str(app_exe_path),
     ], creationflags=subprocess.CREATE_NEW_CONSOLE)
 
-Build:
+Build::
+
     pyinstaller --onefile --name SaludsaUpdaterAgent src/infrastructure/updater/agent_entry.py
 """
-
 import argparse
 import ctypes
 import logging
@@ -42,6 +41,18 @@ HEALTH_CHECK_SECONDS = 8
 
 
 def _setup_logging(install_dir: Path) -> Path:
+    """Configura el logger del agente escribiendo en ``logs/updater.log``.
+
+    Args:
+        install_dir: Directorio de instalación de la aplicación.
+
+    Returns:
+        Path: Ruta del archivo de log creado.
+
+    Side Effects:
+        Crea la carpeta ``logs`` si no existe y configura ``logging`` con dos
+        handlers (archivo y consola).
+    """
     # logs/ vive al nivel raíz de instalación -- persiste entre corridas,
     # a diferencia de updates/ que sí se limpia al terminar.
     log_path = install_dir / "logs" / "updater.log"
@@ -58,19 +69,40 @@ def _setup_logging(install_dir: Path) -> Path:
 
 
 def _wait_for_pid_exit(pid: int, timeout_seconds: int) -> bool:
-    """Espera a que el proceso principal termine. True si terminó, False si timeout."""
+    """Espera a que el proceso principal termine.
+
+    Args:
+        pid: Identificador del proceso a esperar.
+        timeout_seconds: Tiempo máximo de espera en segundos.
+
+    Returns:
+        bool: ``True`` si el proceso terminó, ``False`` si se alcanzó el
+        timeout.
+    """
     handle = ctypes.windll.kernel32.OpenProcess(SYNCHRONIZE, False, pid)
     if not handle:
         return True  # el proceso ya no existe
     try:
-        result = ctypes.windll.kernel32.WaitForSingleObject(handle, timeout_seconds * 1000)
+        result = ctypes.windll.kernel32.WaitForSingleObject(
+            handle, timeout_seconds * 1000
+        )
         return result != WAIT_TIMEOUT
     finally:
         ctypes.windll.kernel32.CloseHandle(handle)
 
 
 def _run_installer(installer_path: Path) -> int:
-    """Corre el instalador Inno Setup en modo silencioso. Retorna el exit code."""
+    """Ejecuta el instalador Inno Setup en modo silencioso.
+
+    Args:
+        installer_path: Ruta del instalador ``.exe`` a ejecutar.
+
+    Returns:
+        int: Código de salida del instalador.
+
+    Side Effects:
+        Ejecuta el instalador como subproceso y registra posibles errores.
+    """
     result = subprocess.run(
         [str(installer_path), "/VERYSILENT", "/NORESTART", "/SUPPRESSMSGBOXES"],
         capture_output=True,
@@ -86,11 +118,28 @@ def _run_installer(installer_path: Path) -> int:
 
 
 def _relaunch(app_exe: Path) -> subprocess.Popen:
+    """Relanza la aplicación principal.
+
+    Args:
+        app_exe: Ruta del ejecutable de la aplicación.
+
+    Returns:
+        subprocess.Popen: Proceso de la aplicación relanzada.
+    """
     return subprocess.Popen([str(app_exe)], cwd=str(app_exe.parent))
 
 
 def _process_is_alive(proc: subprocess.Popen, seconds: int) -> bool:
-    """Health check simple: si sigue vivo después de N segundos, no crasheó al arrancar."""
+    """Verifica si un proceso sigue vivo después de unos segundos.
+
+    Args:
+        proc: Proceso a verificar.
+        seconds: Segundos a esperar antes de comprobar el estado.
+
+    Returns:
+        bool: ``True`` si el proceso sigue en ejecución, ``False`` si terminó
+        antes del tiempo indicado.
+    """
     try:
         proc.wait(timeout=seconds)
         return False  # terminó solo -> mala señal
@@ -99,7 +148,17 @@ def _process_is_alive(proc: subprocess.Popen, seconds: int) -> bool:
 
 
 def _cleanup(installer_path: Path) -> None:
-    """Borra el instalador y las carpetas updates/pending/ vacías."""
+    """Elimina el instalador temporal y las carpetas vacías ``pending``/``updates``.
+
+    Args:
+        installer_path: Ruta del instalador descargado.
+
+    Returns:
+        None. Este método no retorna valor.
+
+    Side Effects:
+        Borra archivos y carpetas si están vacíos.
+    """
     try:
         if installer_path.exists():
             installer_path.unlink()
@@ -108,7 +167,7 @@ def _cleanup(installer_path: Path) -> None:
         pending_dir = installer_path.parent
         if pending_dir.exists() and pending_dir.name.lower() == "pending":
             try:
-                pending_dir.rmdir()          # solo borra si está vacía
+                pending_dir.rmdir()  # solo borra si está vacía
             except OSError:
                 pass
 
@@ -123,20 +182,32 @@ def _cleanup(installer_path: Path) -> None:
     except OSError as e:
         logging.warning(f"No se pudo borrar el instalador temporal: {e}")
 
+
 def _self_delete() -> None:
-    """
-    Programa el borrado del propio .exe después de que el proceso termine.
-    Como Windows bloquea un .exe en ejecución, lanzamos un proceso cmd
-    desatachado que espera 3 segundos y luego borra el archivo.
+    """Programa la eliminación del propio ejecutable tras finalizar.
+
+    Como Windows bloquea un ``.exe`` en ejecución, se lanza un proceso ``cmd``
+    desatachado que espera 3 segundos y luego intenta borrar el archivo.
+
+    Returns:
+        None. Este método no retorna valor.
+
+    Side Effects:
+        Lanza un proceso en segundo plano para eliminar este ejecutable.
     """
     try:
         exe_path = Path(sys.executable).resolve()
-        # Comando silencioso: espera 3s y borra; si aún está bloqueado, reintenta en el próximo arranque
-        cmd = f'cmd /c "timeout /t 3 /nobreak >nul 2>&1 && del \"{exe_path}\" >nul 2>&1"'
+        # Comando silencioso: espera 3s y borra; si aún está bloqueado,
+        # se reintentará en el próximo arranque.
+        cmd = (
+            f'cmd /c "timeout /t 3 /nobreak >nul 2>&1 && '
+            f'del \"{exe_path}\" >nul 2>&1"'
+        )
         subprocess.Popen(
             cmd,
             shell=True,
-            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+            creationflags=subprocess.DETACHED_PROCESS
+            | subprocess.CREATE_NEW_PROCESS_GROUP,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -147,6 +218,18 @@ def _self_delete() -> None:
 
 
 def main() -> int:
+    """Punto de entrada principal del agente de actualización.
+
+    Parsea los argumentos, espera el cierre de la aplicación principal,
+    ejecuta el instalador, relanza la aplicación y realiza limpieza.
+
+    Returns:
+        int: Código de salida del agente (``0`` éxito, ``1`` error).
+
+    Side Effects:
+        Puede mostrar mensajes por consola, escribir logs, instalar software y
+        relanzar procesos.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--pid", type=int, required=True)
     parser.add_argument("--installer", type=Path, required=True)

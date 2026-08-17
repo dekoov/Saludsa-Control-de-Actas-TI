@@ -1,9 +1,32 @@
+"""Esquemas y validaciones para actas de descuento.
+
+Este módulo valida el payload necesario para generar un acta de descuento por
+equipo entregado: datos mínimos del usuario, mes de descuento y campos
+obligatorios del equipo con costo positivo.
+"""
+
 from typing import Any
 
 from src.core.exceptions import ValidationError
 
 
-def validate_discount_payload(data: dict[str, Any]) -> dict[str, Any]:
+def validate_discount_payload(data: dict[str, Any] | None) -> dict[str, Any]:
+    """Valida el payload para generar un acta de descuento.
+
+    Revisa que existan usuario con nombre completo y cédula, mes de descuento,
+    al menos un equipo, y que cada equipo tenga los campos obligatorios con un
+    costo de compra mayor a cero.
+
+    Args:
+        data: Payload JSON recibido desde el cliente.
+
+    Returns:
+        dict[str, Any]: El mismo payload validado.
+
+    Raises:
+        ValidationError: Si falta algún campo obligatorio, los tipos son
+            incorrectos o el costo no es positivo.
+    """
     usuario = data.get("usuario")
     equipos = data.get("equipos")
 

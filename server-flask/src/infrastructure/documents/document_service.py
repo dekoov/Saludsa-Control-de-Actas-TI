@@ -1,3 +1,10 @@
+"""Servicio de generación y conversión de documentos DOCX/PDF.
+
+Utiliza ``docxtpl`` para renderizar plantillas Word y LibreOffice en modo
+headless para convertir DOCX a PDF. La carpeta de salida se resuelve
+dinámicamente priorizando OneDrive de Saludsa o la carpeta ``Documents`` del
+usuario.
+"""
 import io
 import os
 import subprocess
@@ -9,9 +16,17 @@ from src.core.exceptions import ExternalServiceError
 
 
 def get_save_directory() -> str:
-    """
-    Determina la ruta de guardado basada en la existencia de OneDrive - Saludsa.
-    Prioridad:
+    """Resuelve y crea el directorio donde se almacenan los documentos generados.
+
+    Prioriza ``OneDrive - SALUD S.A/Documentos`` si existe; de lo contrario
+    usa ``~/Documents``. Dentro de la carpeta base crea el subdirectorio
+    ``Actas_Generadas``.
+
+    Returns:
+        str: Ruta absoluta del directorio de salida ``Actas_Generadas``.
+
+    Side Effects:
+        Crea el directorio de salida si no existe mediante ``os.makedirs``.
     """
     user_home = os.path.expanduser("~")
     onedrive_path = os.path.join(user_home, "OneDrive - SALUD S.A")
@@ -29,13 +44,33 @@ def get_save_directory() -> str:
 
 
 def generate_file_docx(
-    context: dict, template_filename: str, output_filename: str
+    context: dict[str, object],
+    template_filename: str,
+    output_filename: str,
 ) -> str:
-    """Toma un diccionario de contexto, llena la plantilla especificada y guarda en disco"""
+    """Genera un archivo DOCX renderizando una plantilla con el contexto dado.
 
+    Inyecta automáticamente en el contexto los datos del representante legal
+    definidos en la configuración y guarda el resultado en el directorio
+    retornado por ``get_save_directory``.
+
+    Args:
+        context: Variables de reemplazo para la plantilla DOCX.
+        template_filename: Nombre del archivo de plantilla dentro de
+            ``src/infrastructure/documents/templates/``.
+        output_filename: Nombre con el que se guardará el archivo DOCX.
+
+    Returns:
+        str: Ruta absoluta del archivo DOCX generado.
+
+    Raises:
+        ExternalServiceError: Si ocurre cualquier error durante la carga de la
+            plantilla, el renderizado o el guardado del documento.
+    """
     try:
         template_path = resolve_route(
-            f"src/infrastructure/documents/templates/{template_filename}", is_frontend=False
+            f"src/infrastructure/documents/templates/{template_filename}",
+            is_frontend=False,
         )
         doc = DocxTemplate(template_path)
         context["legal_representative_name"] = config.LEGAL_REPRESENTATIVE_NAME
@@ -52,7 +87,18 @@ def generate_file_docx(
         ) from e
 
 
-def convert_to_pdf_libreoffice(docx_path: str):
+def convert_to_pdf_libreoffice(docx_path: str) -> str:
+    """Convierte un archivo DOCX a PDF usando LibreOffice en modo headless.
+
+    Args:
+        docx_path: Ruta absoluta del archivo DOCX a convertir.
+
+    Returns:
+        str: Ruta absoluta del archivo PDF generado.
+
+    Raises:
+        ExternalServiceError: Si LibreOffice falla o no genera el archivo PDF.
+    """
     libreoffice_path = r"C:\Program Files\LibreOffice\program\soffice.exe"
     output_dir = os.path.dirname(docx_path)
     command = [
@@ -68,7 +114,9 @@ def convert_to_pdf_libreoffice(docx_path: str):
         subprocess.run(command, check=True, shell=True)
         pdf_path = docx_path.replace(".docx", ".pdf")
         if not os.path.exists(pdf_path):
-            raise FileNotFoundError(f"LibreOffice no genero el archivo en: {pdf_path}")
+            raise FileNotFoundError(
+                f"LibreOffice no genero el archivo en: {pdf_path}"
+            )
         return pdf_path
     except Exception as e:
         raise ExternalServiceError(
@@ -77,8 +125,25 @@ def convert_to_pdf_libreoffice(docx_path: str):
 
 
 def convert_to_pdf_buffer(docx_path: str) -> io.BytesIO:
-    """Convierte un docx a pdf, lo lee en memoria y borra el pdf temporal"""
-    pdf_path = None
+    """Convierte un DOCX a PDF y lo carga en un buffer en memoria.
+
+    El PDF temporal generado por LibreOffice se elimina después de leerlo,
+    conservando únicamente el buffer en memoria.
+
+    Args:
+        docx_path: Ruta absoluta del archivo DOCX a convertir.
+
+    Returns:
+        io.BytesIO: Buffer posicionado al inicio con el contenido binario del
+        PDF.
+
+    Raises:
+        ExternalServiceError: Si falla la conversión a PDF.
+
+    Side Effects:
+        Crea y luego elimina un archivo PDF intermedio en disco.
+    """
+    pdf_path: str | None = None
     try:
         pdf_path = convert_to_pdf_libreoffice(docx_path)
         # Leer el archivo en memoria

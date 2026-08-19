@@ -46,7 +46,7 @@ class DiscountDocumentService:
             "full_name": usuario.get("full_name", "NA"),
             "national_id": usuario.get("national_id", "NA"),
             "discount_month": mes_descuento,
-            "text_amount": monto_a_letras(costo_descuento),
+            "text_amount": monto_a_letras(costo_descuento, incluir_centavos=True),
             "eq": {
                 "quantity": eq.get("quantity", 1),
                 "manufacturer": eq.get("manufacturer", "NA"),

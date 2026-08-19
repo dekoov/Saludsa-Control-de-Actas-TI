@@ -152,18 +152,17 @@ def monto_a_letras(monto: float | int | str, incluir_centavos: bool = True) -> s
         monto: Cantidad monetaria a convertir. Puede ser numérica o cadena
             convertible a ``float``.
         incluir_centavos: Si es ``True``, incluye la parte de centavos en el
-            resultado. Actualmente siempre se incluye; el parámetro se mantiene
-            por compatibilidad con futuras extensiones.
+            resultado. Si es ``False``, omite los centavos y retorna únicamente los enteros.
 
     Returns:
         Cadena en mayúsculas con el monto expresado en palabras, por ejemplo
-        ``'DOCE DÓLARES CON CINCUENTA CENTAVOS'``.
+        ``'DOCE DÓLARES CON CINCUENTA CENTAVOS'`` o ``'CUATROCIENTOS DÓLARES'``.
 
     Example:
         >>> monto_a_letras(12.50)
         'DOCE DÓLARES CON CINCUENTA CENTAVOS'
-        >>> monto_a_letras(1)
-        'UN DÓLAR CON CERO CENTAVOS'
+        >>> monto_a_letras(400.00, incluir_centavos=False)
+        'CUATROCIENTOS DÓLARES'
     """
     monto_str = f"{float(monto):.2f}"
     entero_str, decimal_str = monto_str.split(".")
@@ -178,6 +177,9 @@ def monto_a_letras(monto: float | int | str, incluir_centavos: bool = True) -> s
         if letras_entero.endswith("UNO"):
             letras_entero = letras_entero[:-1]  # Eliminamos la 'O'
         texto_dolares = f"{letras_entero} DÓLARES"
+
+    if not incluir_centavos:
+        return texto_dolares
 
     if centavos == 0:
         texto_centavos = "CERO CENTAVOS"
